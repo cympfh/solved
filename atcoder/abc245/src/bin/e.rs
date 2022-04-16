@@ -62,6 +62,9 @@ impl<T: Sized + Ord> BTreeMultiSet<T> {
     pub fn insert(&mut self, item: T) {
         self.0.entry(item).and_modify(|e| *e += 1).or_insert(1);
     }
+    pub fn get(&self, item: &T) -> Option<usize> {
+        self.0.get(item).cloned()
+    }
     pub fn remove(&mut self, item: T) {
         if let Some(&c) = self.0.get(&item) {
             if c <= 1 {
