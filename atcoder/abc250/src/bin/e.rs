@@ -6,8 +6,9 @@ struct Set {
     data: BTreeSet<u64>,
     hash_xor: u64,
     hash_sum: [u64; 3],
-    hash_num: [usize; 6],
-    hash_prod: [u64; 3],
+    hash_min: u64,
+    hash_max: u64,
+    hash_num: [usize; 5],
 }
 
 impl Set {
@@ -17,6 +18,8 @@ impl Set {
         }
         self.data.insert(item);
         self.hash_xor ^= item;
+        self.hash_min = min!(self.hash_min, item);
+        self.hash_max = min!(self.hash_max, item);
         self.hash_sum[0] = (self.hash_sum[0] + item) % 998244353;
         self.hash_sum[1] = (self.hash_sum[1] + item) % 10_000_007;
         self.hash_sum[2] = (self.hash_sum[2] + item) % 1_000_000_007;
@@ -24,20 +27,17 @@ impl Set {
         self.hash_num[1] += if item % 3 == 0 { 1 } else { 0 };
         self.hash_num[2] += if item % 5 == 0 { 1 } else { 0 };
         self.hash_num[3] += if item % 7 == 0 { 1 } else { 0 };
-        self.hash_num[4] += if item % 9 == 0 { 1 } else { 0 };
-        self.hash_num[5] += if item % 11 == 0 { 1 } else { 0 };
-        self.hash_prod[0] = (self.hash_prod[0] * item) % 998244353;
-        self.hash_prod[1] = (self.hash_prod[1] * (item + 1)) % 1_000_000_007;
-        self.hash_prod[2] = (self.hash_prod[2] * (item + 2)) % 1_000_000_007;
+        self.hash_num[4] += if item % 11 == 0 { 1 } else { 0 };
     }
-    fn hash(&self) -> (usize, u64, [u64; 3], [usize; 6], [u64; 3]) {
+    fn hash(&self) -> (usize, u64, [u64; 3], u64, u64, [usize; 5]) {
         let len = self.data.len();
         (
             len,
             self.hash_xor,
             self.hash_sum,
+            self.hash_min,
+            self.hash_max,
             self.hash_num,
-            self.hash_prod,
         )
     }
 }
