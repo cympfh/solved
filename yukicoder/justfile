@@ -1,0 +1,22 @@
+set export
+
+# Create or Edit
+edit problem_id:
+  #!/usr/bin/env bash
+  if [ ! -f ./src/bin/$problem_id.rs ]; then
+    template rs > ./src/bin/$problem_id.rs
+  fi
+  nvim ./src/bin/$problem_id.rs
+
+# with Clipboard Input
+test problem_id:
+  #!/usr/bin/env bash
+  clip | cargo run --bin $problem_id
+
+# to Yuicoder Server
+submit problem_id:
+  #!/usr/bin/env bash
+  curl -XPOST https://yukicoder.me/api/v1/problems/no/$problem_id/submit \
+    -H "Authorization: bearer $YUKICODER_API_KEY" \
+    -F lang=rust \
+    -F file=@./src/bin/$problem_id.rs
