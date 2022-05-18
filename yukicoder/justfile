@@ -11,7 +11,7 @@ edit problem_id:
 # with Clipboard Input
 test problem_id:
   #!/usr/bin/env bash
-  clip | cargo run --bin $problem_id
+  clip -o | nkf | cargo run --bin $problem_id
 
 # to Yuicoder Server
 submit problem_id:
