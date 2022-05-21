@@ -1,13 +1,13 @@
 #![allow(unused_imports, unused_macros, dead_code)]
 use std::{cmp::*, collections::*};
 
-/// TODO(Unsolved!)
 fn main() {
     let mut sc = Scanner::new();
     let n: usize = sc.cin();
-    let x: i64 = sc.cin();
-    let y: i64 = sc.cin();
-    let rs: Vec<i64> = sc.vec(n);
+    let x: i128 = sc.cin();
+    let y: i128 = sc.cin();
+    let mut rs: Vec<i128> = sc.vec(n);
+    rs.sort();
 
     let mut left = rs[0];
     let mut right = rs[0];
