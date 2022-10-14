@@ -4,6 +4,80 @@ use std::{cmp::*, collections::*};
 fn main() {
     let mut sc = Scanner::new();
     let n: usize = sc.cin();
+    let a: Vec<Vec<u64>> = (0..n).map(|_| sc.vec(n)).collect();
+    let mut memo = DefaultDict::new(0_u64);
+    // from start
+    let mut q = VecDeque::new();
+    q.push_back((0, 0, a[0][0]));
+    while let Some((i, j, acc)) = q.pop_front() {
+        if i + j == n - 1 {
+            trace!(("=>", i, j, acc));
+            memo[(i, j, acc)] += 1;
+            continue;
+        }
+        q.push_back((i + 1, j, acc ^ a[i + 1][j]));
+        q.push_back((i, j + 1, acc ^ a[i][j + 1]));
+    }
+    // from goal
+    let mut ans = 0;
+    let mut q = VecDeque::new();
+    q.push_back((n - 1, n - 1, a[n - 1][n - 1]));
+    while let Some((i, j, acc)) = q.pop_front() {
+        if i + j == n - 1 {
+            let acc = acc ^ a[i][j];
+            trace!(("<=", i, j, acc));
+            ans += memo[(i, j, acc)];
+            continue;
+        }
+        q.push_back((i - 1, j, acc ^ a[i - 1][j]));
+        q.push_back((i, j - 1, acc ^ a[i][j - 1]));
+    }
+    put!(ans);
+}
+
+// @collections/defaultdict
+/// collections - defaultdict
+#[derive(Debug, Clone)]
+pub struct DefaultDict<K, V>
+where
+    K: Eq + std::hash::Hash,
+{
+    data: std::collections::HashMap<K, V>,
+    default: V,
+}
+impl<K: Eq + std::hash::Hash, V> DefaultDict<K, V> {
+    pub fn new(default: V) -> DefaultDict<K, V> {
+        DefaultDict {
+            data: std::collections::HashMap::new(),
+            default,
+        }
+    }
+    pub fn keys(&self) -> std::collections::hash_map::Keys<K, V> {
+        self.data.keys()
+    }
+    pub fn iter(&self) -> std::collections::hash_map::Iter<K, V> {
+        self.data.iter()
+    }
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+}
+impl<K: Eq + std::hash::Hash, V> std::ops::Index<K> for DefaultDict<K, V> {
+    type Output = V;
+    fn index(&self, key: K) -> &Self::Output {
+        if let Some(val) = self.data.get(&key) {
+            val
+        } else {
+            &self.default
+        }
+    }
+}
+impl<K: Eq + std::hash::Hash + Clone, V: Clone> std::ops::IndexMut<K> for DefaultDict<K, V> {
+    fn index_mut(&mut self, key: K) -> &mut Self::Output {
+        let val = self.default.clone();
+        self.data.entry(key.clone()).or_insert(val);
+        self.data.get_mut(&key).unwrap()
+    }
 }
 
 // {{{
