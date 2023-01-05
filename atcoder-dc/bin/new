@@ -1,0 +1,24 @@
+#!/bin/bash
+
+echo -n "Contest? (e.g. abc273) > "
+read c
+
+echo -n "Problem? (a, b, ...) > "
+read p
+
+FILE="src/${c}_${p}.dc"
+
+if [ -f $FILE ]; then
+  echo "$FILE already exists"
+else
+  : >$FILE
+  echo "$FILE created"
+fi
+
+if [ ! -z "${EDITOR}" ]; then
+  echo -n "Edit? [Y/n] > "
+  read q
+  if [ -z "$q" ] || [ $q = "Y" ] || [ $q = "y" ]; then
+    ${EDITOR} $FILE
+  fi
+fi
