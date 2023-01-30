@@ -11,20 +11,17 @@ struct Game {
     graph: Graph,
     days: usize,
     k: usize,
-    rand: XorShift,
     bestplan: Plan,
     bestscore: f64,
 }
 impl Game {
     fn new(graph: Graph, days: usize, k: usize) -> Self {
-        let rand = XorShift::new();
         let bestplan = Plan::new(vec![]);
         let bestscore = 0.0;
         Self {
             graph,
             days,
             k,
-            rand,
             bestplan,
             bestscore,
         }
@@ -205,9 +202,10 @@ fn main() {
     let graph = Graph::new(n, m, edges);
     let mut game = Game::new(graph, d, k);
 
-    let mut plan = baseline(&game);
-    game.challenge(&mut plan);
-    trace!(#Baseline, plan.score);
+    // 要らない
+    // let mut plan = baseline(&game);
+    // game.challenge(&mut plan);
+    // trace!(#Baseline, plan.score);
 
     let norma = game.k;
     let mut plan = disjoint_planning(&game, norma);
@@ -215,11 +213,6 @@ fn main() {
     trace!(#Disjoint, norma, plan.score);
 
     let norma = (game.k + ((game.k + game.days - 1) / game.days)) / 2;
-    let mut plan = disjoint_planning(&game, norma);
-    game.challenge(&mut plan);
-    trace!(#Disjoint, norma, plan.score);
-
-    let norma = (2 * game.k + ((game.k + game.days - 1) / game.days)) / 3;
     let mut plan = disjoint_planning(&game, norma);
     game.challenge(&mut plan);
     trace!(#Disjoint, norma, plan.score);
@@ -298,127 +291,6 @@ fn dfs_planning(game: &Game) -> Plan {
     }
     Plan::new(data)
 }
-
-// {{{ @collections/defaultdict
-/// collections - defaultdict
-#[derive(Debug, Clone)]
-pub struct DefaultDict<K, V>
-where
-    K: Eq + std::hash::Hash,
-{
-    data: std::collections::HashMap<K, V>,
-    default: V,
-}
-impl<K: Eq + std::hash::Hash, V> DefaultDict<K, V> {
-    pub fn new(default: V) -> DefaultDict<K, V> {
-        DefaultDict {
-            data: std::collections::HashMap::new(),
-            default,
-        }
-    }
-    pub fn keys(&self) -> std::collections::hash_map::Keys<K, V> {
-        self.data.keys()
-    }
-    pub fn iter(&self) -> std::collections::hash_map::Iter<K, V> {
-        self.data.iter()
-    }
-    pub fn len(&self) -> usize {
-        self.data.len()
-    }
-}
-impl<K: Eq + std::hash::Hash, V> std::ops::Index<K> for DefaultDict<K, V> {
-    type Output = V;
-    fn index(&self, key: K) -> &Self::Output {
-        if let Some(val) = self.data.get(&key) {
-            val
-        } else {
-            &self.default
-        }
-    }
-}
-impl<K: Eq + std::hash::Hash + Clone, V: Clone> std::ops::IndexMut<K> for DefaultDict<K, V> {
-    fn index_mut(&mut self, key: K) -> &mut Self::Output {
-        let val = self.default.clone();
-        self.data.entry(key.clone()).or_insert(val);
-        self.data.get_mut(&key).unwrap()
-    }
-}
-// }}}
-
-// {{{ @num/random/xorshift
-// @num/random/fromu64
-/// Number - Utility - FromU64
-pub trait FromU64 {
-    fn coerce(x: u64) -> Self;
-}
-impl FromU64 for u64 {
-    fn coerce(x: u64) -> Self {
-        x
-    }
-}
-macro_rules! define_fromu64 {
-    ($ty:ty) => {
-        impl FromU64 for $ty {
-            fn coerce(x: u64) -> Self {
-                x as $ty
-            }
-        }
-    };
-}
-define_fromu64!(usize);
-define_fromu64!(u32);
-define_fromu64!(u128);
-define_fromu64!(i32);
-define_fromu64!(i64);
-define_fromu64!(i128);
-impl FromU64 for bool {
-    fn coerce(x: u64) -> Self {
-        x % 2 == 0
-    }
-}
-impl FromU64 for f32 {
-    fn coerce(x: u64) -> Self {
-        (x as f32) / (std::u64::MAX as f32)
-    }
-}
-impl FromU64 for f64 {
-    fn coerce(x: u64) -> Self {
-        (x as f64) / (std::u64::MAX as f64)
-    }
-}
-
-/// Random Number - Xor-Shift Algorithm
-pub struct XorShift(u64);
-impl XorShift {
-    pub fn new() -> Self {
-        XorShift(88_172_645_463_325_252)
-    }
-    fn next(&mut self) -> u64 {
-        let mut x = self.0;
-        x = x ^ (x << 13);
-        x = x ^ (x >> 7);
-        x = x ^ (x << 17);
-        self.0 = x;
-        x
-    }
-    pub fn gen<T: FromU64>(&mut self) -> T {
-        T::coerce(self.next())
-    }
-    pub fn choose<T: Copy>(&mut self, ls: &Vec<T>) -> T {
-        let i = self.gen::<usize>() % ls.len();
-        ls[i]
-    }
-    pub fn choose2<T: Copy>(&mut self, ls: &Vec<T>) -> (T, T) {
-        let i = self.gen::<usize>() % ls.len();
-        let j = self.gen::<usize>() % ls.len();
-        if i != j {
-            (ls[i], ls[j])
-        } else {
-            self.choose2(ls)
-        }
-    }
-}
-// }}}
 
 // {{{
 use std::io::{self, Write};
