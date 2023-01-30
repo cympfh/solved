@@ -1,5 +1,6 @@
 #![allow(unused_imports, unused_macros, dead_code)]
 use std::{cmp::*, collections::*};
+const INF: i64 = 1_000_000_000;
 
 // {{{ struct Game
 /// N <= 1000
@@ -11,23 +12,30 @@ struct Game {
     days: usize,
     k: usize,
     rand: XorShift,
+    bestplan: Plan,
+    bestscore: f64,
 }
 impl Game {
     fn new(graph: Graph, days: usize, k: usize) -> Self {
         let rand = XorShift::new();
+        let bestplan = Plan::new(vec![]);
+        let bestscore = 0.0;
         Self {
             graph,
             days,
             k,
             rand,
+            bestplan,
+            bestscore,
         }
     }
 }
 impl Game {
-    fn submit(&self, plan: &Plan) {
+    /// self.bestplan を出力
+    fn submit(&self) {
         let mut ans = vec![0; self.graph.m];
         for i in 0..self.days {
-            for &j in plan.data[i].iter() {
+            for &j in self.bestplan.data[i].iter() {
                 ans[j] = i + 1;
             }
         }
@@ -36,37 +44,42 @@ impl Game {
         }
         put!(..ans);
     }
-    fn update_score_all(&self, plan: &mut Plan) {
+    /// スコアが良ければ self.bestplan を更新する
+    fn challenge(&mut self, plan: &mut Plan) {
+        self.update_score(plan);
+        if self.bestscore <= 0.0 || self.bestscore > plan.score {
+            self.bestplan = plan.clone();
+            self.bestscore = plan.score;
+        }
+    }
+    /// plan.score と plan.scores を更新する
+    fn update_score(&self, plan: &mut Plan) {
         for d in 0..self.days {
-            self.update_score_oneday(plan, d);
+            plan.scores[d] = self.compute_score_oneday(plan, d);
         }
         plan.score = plan.scores.iter().sum::<f64>() / self.days as f64 * 1000.0;
     }
-    fn update_score_oneday(&self, plan: &mut Plan, i: usize) {
-        let score_old = plan.scores[i];
-        let score_new = self.score_oneday(plan, i);
-        plan.scores[i] += score_new - score_old;
-    }
-    fn score_oneday(&self, plan: &Plan, i: usize) -> f64 {
-        let mut d = self.graph.mat.clone();
-        for &i in plan.data[i].iter() {
-            let (u, v, _) = self.graph.edges[i];
-            d[u][v] = 1_000_000_000;
-            d[v][u] = 1_000_000_000;
+    /// d日目の不満度を計算する
+    fn compute_score_oneday(&self, plan: &Plan, d: usize) -> f64 {
+        let ignores: BTreeSet<usize> = plan.data[d].iter().cloned().collect();
+        let mut g = vec![vec![]; self.graph.n];
+        for i in 0..self.graph.m {
+            if ignores.contains(&i) {
+                continue;
+            }
+            let (u, v, w) = self.graph.edges[i];
+            g[u].push((v, w));
+            g[v].push((u, w));
         }
-        warshall_floyd(&mut d);
-        let mut r = 0;
-        let n = self.graph.n;
-        let n2 = n as f64 * (n - 1) as f64;
-        for u in 0..n {
-            for v in 0..n {
-                if u == v {
-                    continue;
-                }
-                r += d[u][v] - self.graph.distance[u][v];
+        let dist = Graph::dijkstra_matrix(&g);
+        let mut fuman = 0.0;
+        for u in 0..self.graph.n {
+            for v in u + 1..self.graph.n {
+                fuman += (dist[u][v] - self.graph.distance[u][v]) as f64;
             }
         }
-        r as f64 / n2
+        let den = self.graph.n * (self.graph.n - 1) / 2;
+        fuman / den as f64
     }
 }
 // }}}
@@ -91,7 +104,7 @@ impl Graph {
             g
         };
         let mat = {
-            let mut f = ndarray![1_000_000_000; n, n];
+            let mut f = ndarray![INF; n, n];
             for i in 0..n {
                 f[i][i] = 0;
             }
@@ -101,12 +114,7 @@ impl Graph {
             }
             f
         };
-        // Aux-min-distance
-        let distance = {
-            let mut f = mat.clone();
-            warshall_floyd(&mut f);
-            f
-        };
+        let distance = Graph::dijkstra_matrix(&list);
         Self {
             n,
             m,
@@ -115,6 +123,34 @@ impl Graph {
             mat,
             distance,
         }
+    }
+}
+impl Graph {
+    fn dijkstra(g: &Vec<Vec<(usize, i64)>>, s: usize) -> Vec<i64> {
+        let mut dist = vec![INF; g.len()];
+        let mut que = BinaryHeap::new();
+        que.push((Reverse(0), s));
+        dist[s] = 0;
+        while let Some((Reverse(d), u)) = que.pop() {
+            if dist[u] != d {
+                continue;
+            }
+            for &(v, w) in &g[u] {
+                let d2 = d + w;
+                if dist[v] > d2 {
+                    dist[v] = d2;
+                    que.push((Reverse(d2), v));
+                }
+            }
+        }
+        dist
+    }
+    fn dijkstra_matrix(g: &Vec<Vec<(usize, i64)>>) -> Vec<Vec<i64>> {
+        let mut dist = vec![];
+        for s in 0..g.len() {
+            dist.push(Graph::dijkstra(g, s));
+        }
+        dist
     }
 }
 // }}}
@@ -167,22 +203,28 @@ fn main() {
         .collect();
 
     let graph = Graph::new(n, m, edges);
-    let game = Game::new(graph, d, k);
+    let mut game = Game::new(graph, d, k);
 
-    #[allow(unused_assignments)]
-    let mut plan_submit = Plan::new(vec![]);
+    let mut plan = baseline(&game);
+    game.challenge(&mut plan);
+    trace!(#Baseline, plan.score);
 
-    // let mut plan = baseline(&game);
-    // game.update_score_all(&mut plan);
-    // trace!(#Baseline, plan.score);
-    // plan_submit = plan.clone();
+    let norma = game.k;
+    let mut plan = disjoint_planning(&game, norma);
+    game.challenge(&mut plan);
+    trace!(#Disjoint, norma, plan.score);
 
-    let mut plan = disjoint_planning(&game);
-    game.update_score_all(&mut plan);
-    trace!(#Disjoint, plan.score);
-    plan_submit = plan.clone();
+    let norma = (game.k + ((game.k + game.days - 1) / game.days)) / 2;
+    let mut plan = disjoint_planning(&game, norma);
+    game.challenge(&mut plan);
+    trace!(#Disjoint, norma, plan.score);
 
-    game.submit(&plan_submit);
+    let norma = (2 * game.k + ((game.k + game.days - 1) / game.days)) / 3;
+    let mut plan = disjoint_planning(&game, norma);
+    game.challenge(&mut plan);
+    trace!(#Disjoint, norma, plan.score);
+
+    game.submit();
 }
 
 fn baseline(game: &Game) -> Plan {
@@ -195,13 +237,10 @@ fn baseline(game: &Game) -> Plan {
 }
 
 // 辺どうしが共通頂点を持たないように選ぶ
-fn disjoint_planning(game: &Game) -> Plan {
+fn disjoint_planning(game: &Game, norma: usize) -> Plan {
     let mut data = vec![vec![]; game.days];
     let mut edge_ids: BTreeSet<usize> = (0..game.graph.m).collect();
     let mut d = 0;
-    // let norma = game.k;
-    let norma = (game.k + ((game.k + game.days - 1) / game.days)) / 2;
-    // let norma = (2 * game.k + ((game.k + game.days - 1) / game.days)) / 3;
     while !edge_ids.is_empty() {
         let mut vset = BTreeSet::new();
         let mut used = vec![];
@@ -258,23 +297,6 @@ fn dfs_planning(game: &Game) -> Plan {
         data[i % game.days].push(ord[i]);
     }
     Plan::new(data)
-}
-
-/// Graph - Warshall-Floyd, Approximate
-pub fn warshall_floyd(f: &mut Vec<Vec<i64>>) {
-    let n = f.len();
-    // for i in 0..n { f[i][i] = 0; }
-    let maxk = min!(n, 2_000_000 / n / n);
-    for k in 0..maxk {
-        for i in 0..n {
-            for j in 0..n {
-                let w = f[i][k] + f[k][j];
-                if w < f[i][j] {
-                    f[i][j] = w;
-                }
-            }
-        }
-    }
 }
 
 // {{{ @collections/defaultdict
