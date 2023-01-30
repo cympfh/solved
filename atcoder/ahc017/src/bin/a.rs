@@ -1,6 +1,7 @@
 #![allow(unused_imports, unused_macros, dead_code)]
 use std::{cmp::*, collections::*};
 
+// {{{ struct Game
 /// N <= 1000
 /// M <= 300
 /// D <= 30
@@ -22,7 +23,55 @@ impl Game {
         }
     }
 }
+impl Game {
+    fn submit(&self, plan: &Plan) {
+        let mut ans = vec![0; self.graph.m];
+        for i in 0..self.days {
+            for &j in plan.data[i].iter() {
+                ans[j] = i + 1;
+            }
+        }
+        for j in 0..self.graph.m {
+            assert!(1 <= ans[j] && ans[j] <= self.days, ">>> ans = {:?}", ans);
+        }
+        put!(..ans);
+    }
+    fn update_score_all(&self, plan: &mut Plan) {
+        for d in 0..self.days {
+            self.update_score_oneday(plan, d);
+        }
+        plan.score = plan.scores.iter().sum::<f64>() / self.days as f64 * 1000.0;
+    }
+    fn update_score_oneday(&self, plan: &mut Plan, i: usize) {
+        let score_old = plan.scores[i];
+        let score_new = self.score_oneday(plan, i);
+        plan.scores[i] += score_new - score_old;
+    }
+    fn score_oneday(&self, plan: &Plan, i: usize) -> f64 {
+        let mut d = self.graph.mat.clone();
+        for &i in plan.data[i].iter() {
+            let (u, v, _) = self.graph.edges[i];
+            d[u][v] = 1_000_000_000;
+            d[v][u] = 1_000_000_000;
+        }
+        warshall_floyd(&mut d);
+        let mut r = 0;
+        let n = self.graph.n;
+        let n2 = n as f64 * (n - 1) as f64;
+        for u in 0..n {
+            for v in 0..n {
+                if u == v {
+                    continue;
+                }
+                r += d[u][v] - self.graph.distance[u][v];
+            }
+        }
+        r as f64 / n2
+    }
+}
+// }}}
 
+// struct Graph {{{
 struct Graph {
     n: usize,
     m: usize,
@@ -68,7 +117,9 @@ impl Graph {
         }
     }
 }
+// }}}
 
+// {{{ struct Plan
 #[derive(Clone, Debug)]
 struct Plan {
     data: Vec<Vec<usize>>,
@@ -90,21 +141,7 @@ impl Plan {
         self.data[id_day].push(id_edge);
     }
 }
-
-impl Game {
-    fn submit(&self, plan: &Plan) {
-        let mut ans = vec![0; self.graph.m];
-        for i in 0..self.days {
-            for &j in plan.data[i].iter() {
-                ans[j] = i + 1;
-            }
-        }
-        for j in 0..self.graph.m {
-            assert!(1 <= ans[j] && ans[j] <= self.days, ">>> ans = {:?}", ans);
-        }
-        put!(..ans);
-    }
-}
+// }}}
 
 fn main() {
     let mut sc = Scanner::default();
@@ -223,41 +260,6 @@ fn dfs_planning(game: &Game) -> Plan {
     Plan::new(data)
 }
 
-impl Game {
-    fn update_score_all(&self, plan: &mut Plan) {
-        for d in 0..self.days {
-            self.update_score_oneday(plan, d);
-        }
-        plan.score = plan.scores.iter().sum::<f64>() / self.days as f64 * 1000.0;
-    }
-    fn update_score_oneday(&self, plan: &mut Plan, i: usize) {
-        let score_old = plan.scores[i];
-        let score_new = self.score_oneday(plan, i);
-        plan.scores[i] += score_new - score_old;
-    }
-    fn score_oneday(&self, plan: &Plan, i: usize) -> f64 {
-        let mut d = self.graph.mat.clone();
-        for &i in plan.data[i].iter() {
-            let (u, v, _) = self.graph.edges[i];
-            d[u][v] = 1_000_000_000;
-            d[v][u] = 1_000_000_000;
-        }
-        warshall_floyd(&mut d);
-        let mut r = 0;
-        let n = self.graph.n;
-        let n2 = n as f64 * (n - 1) as f64;
-        for u in 0..n {
-            for v in 0..n {
-                if u == v {
-                    continue;
-                }
-                r += d[u][v] - self.graph.distance[u][v];
-            }
-        }
-        r as f64 / n2
-    }
-}
-
 /// Graph - Warshall-Floyd, Approximate
 pub fn warshall_floyd(f: &mut Vec<Vec<i64>>) {
     let n = f.len();
@@ -275,8 +277,53 @@ pub fn warshall_floyd(f: &mut Vec<Vec<i64>>) {
     }
 }
 
-// {{{ rand
-// @num/random/xorshift
+// {{{ @collections/defaultdict
+/// collections - defaultdict
+#[derive(Debug, Clone)]
+pub struct DefaultDict<K, V>
+where
+    K: Eq + std::hash::Hash,
+{
+    data: std::collections::HashMap<K, V>,
+    default: V,
+}
+impl<K: Eq + std::hash::Hash, V> DefaultDict<K, V> {
+    pub fn new(default: V) -> DefaultDict<K, V> {
+        DefaultDict {
+            data: std::collections::HashMap::new(),
+            default,
+        }
+    }
+    pub fn keys(&self) -> std::collections::hash_map::Keys<K, V> {
+        self.data.keys()
+    }
+    pub fn iter(&self) -> std::collections::hash_map::Iter<K, V> {
+        self.data.iter()
+    }
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+}
+impl<K: Eq + std::hash::Hash, V> std::ops::Index<K> for DefaultDict<K, V> {
+    type Output = V;
+    fn index(&self, key: K) -> &Self::Output {
+        if let Some(val) = self.data.get(&key) {
+            val
+        } else {
+            &self.default
+        }
+    }
+}
+impl<K: Eq + std::hash::Hash + Clone, V: Clone> std::ops::IndexMut<K> for DefaultDict<K, V> {
+    fn index_mut(&mut self, key: K) -> &mut Self::Output {
+        let val = self.default.clone();
+        self.data.entry(key.clone()).or_insert(val);
+        self.data.get_mut(&key).unwrap()
+    }
+}
+// }}}
+
+// {{{ @num/random/xorshift
 // @num/random/fromu64
 /// Number - Utility - FromU64
 pub trait FromU64 {
