@@ -72,13 +72,13 @@ impl Graph {
 #[derive(Clone, Debug)]
 struct Plan {
     data: Vec<Vec<usize>>,
-    scores: Vec<i64>, // 日毎の不満の和
+    scores: Vec<f64>, // 一日の不満
     score: f64,       // 平均不満度
 }
 impl Plan {
     fn new(data: Vec<Vec<usize>>) -> Self {
         let days = data.len();
-        let scores = vec![0; days];
+        let scores = vec![0.0; days];
         let score = 0.0;
         Self {
             data,
@@ -162,7 +162,9 @@ fn disjoint_planning(game: &Game) -> Plan {
     let mut data = vec![vec![]; game.days];
     let mut edge_ids: BTreeSet<usize> = (0..game.graph.m).collect();
     let mut d = 0;
+    // let norma = game.k;
     let norma = (game.k + ((game.k + game.days - 1) / game.days)) / 2;
+    // let norma = (2 * game.k + ((game.k + game.days - 1) / game.days)) / 3;
     while !edge_ids.is_empty() {
         let mut vset = BTreeSet::new();
         let mut used = vec![];
@@ -226,16 +228,14 @@ impl Game {
         for d in 0..self.days {
             self.update_score_oneday(plan, d);
         }
-        plan.score = plan.scores.iter().sum::<i64>() as f64
-            / (self.graph.n * (self.graph.n - 1) / 2 * self.days) as f64
-            * 1000.0;
+        plan.score = plan.scores.iter().sum::<f64>() / self.days as f64 * 1000.0;
     }
     fn update_score_oneday(&self, plan: &mut Plan, i: usize) {
         let score_old = plan.scores[i];
         let score_new = self.score_oneday(plan, i);
         plan.scores[i] += score_new - score_old;
     }
-    fn score_oneday(&self, plan: &Plan, i: usize) -> i64 {
+    fn score_oneday(&self, plan: &Plan, i: usize) -> f64 {
         let mut d = self.graph.mat.clone();
         for &i in plan.data[i].iter() {
             let (u, v, _) = self.graph.edges[i];
@@ -244,16 +244,21 @@ impl Game {
         }
         warshall_floyd(&mut d);
         let mut r = 0;
-        for u in 0..self.graph.n {
-            for v in 0..u {
+        let n = self.graph.n;
+        let n2 = n as f64 * (n - 1) as f64;
+        for u in 0..n {
+            for v in 0..n {
+                if u == v {
+                    continue;
+                }
                 r += d[u][v] - self.graph.distance[u][v];
             }
         }
-        r
+        r as f64 / n2
     }
 }
 
-/// Graph - Warshall-Floyd
+/// Graph - Warshall-Floyd, Approximate
 pub fn warshall_floyd(f: &mut Vec<Vec<i64>>) {
     let n = f.len();
     // for i in 0..n { f[i][i] = 0; }
