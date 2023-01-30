@@ -85,13 +85,14 @@ impl Game {
 struct Graph {
     n: usize,
     m: usize,
+    position: Vec<(i64, i64)>, // 頂点座標
     edges: Vec<(usize, usize, i64)>,
     list: Vec<Vec<(usize, i64)>>, // 隣接リスト
     mat: Vec<Vec<i64>>,           // 隣接行列
     distance: Vec<Vec<i64>>,      // 点対最短距離 (近似)
 }
 impl Graph {
-    fn new(n: usize, m: usize, edges: Vec<(usize, usize, i64)>) -> Self {
+    fn new(n: usize, m: usize, position: Vec<(i64, i64)>, edges: Vec<(usize, usize, i64)>) -> Self {
         let list = {
             let mut g = vec![vec![]; n];
             for &(u, v, w) in edges.iter() {
@@ -115,6 +116,7 @@ impl Graph {
         Self {
             n,
             m,
+            position,
             edges,
             list,
             mat,
@@ -191,7 +193,7 @@ fn main() {
             (u, v, w)
         })
         .collect();
-    let _pos: Vec<_> = (0..n)
+    let position: Vec<_> = (0..n)
         .map(|_| {
             let x: i64 = sc.cin();
             let y: i64 = sc.cin();
@@ -199,7 +201,7 @@ fn main() {
         })
         .collect();
 
-    let graph = Graph::new(n, m, edges);
+    let graph = Graph::new(n, m, position, edges);
     let mut game = Game::new(graph, d, k);
 
     // 要らない
@@ -260,34 +262,6 @@ fn disjoint_planning(game: &Game, norma: usize) -> Plan {
         while data[d].len() >= game.k {
             d = (d + 1) % game.days;
         }
-    }
-    Plan::new(data)
-}
-
-// DFS で一筆書きっぽく書いたパスを分散させてく
-// 今バグってる。辺のIDの代わりに頂点IDが入っちゃってる
-fn dfs_planning(game: &Game) -> Plan {
-    let n = game.graph.n;
-    let mut visited = vec![false; n];
-    let mut ord = vec![];
-    let mut stack = vec![0];
-    while let Some(u) = stack.pop() {
-        if visited[u] {
-            continue;
-        }
-        visited[u] = true;
-        ord.push(u);
-        for &(v, _) in game.graph.list[u].iter() {
-            if visited[v] {
-                continue;
-            }
-            stack.push(v);
-        }
-    }
-    assert_eq!(ord.len(), n);
-    let mut data = vec![vec![]; game.days];
-    for i in 0..ord.len() {
-        data[i % game.days].push(ord[i]);
     }
     Plan::new(data)
 }
