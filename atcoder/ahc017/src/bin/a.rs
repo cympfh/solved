@@ -219,9 +219,16 @@ fn main() {
     game.challenge(&mut plan);
     trace!(#Disjoint, norma, plan.score);
 
+    // let mut plan = kmeans_planning(&game);
+    // game.challenge(&mut plan);
+    // trace!(#KMeans, plan.score);
+
+    trace!(#Score, game.bestscore);
     game.submit();
 }
 
+/// 適当に振り分けてる
+/// 全く強くないのでやらなくて良い
 fn baseline(game: &Game) -> Plan {
     let mut data = vec![vec![]; game.days];
     for i in 0..game.graph.m {
@@ -263,6 +270,66 @@ fn disjoint_planning(game: &Game, norma: usize) -> Plan {
             d = (d + 1) % game.days;
         }
     }
+    Plan::new(data)
+}
+
+/// 実用性がまだない
+/// 辺に座標を割り当てて k-means クラスタリングをやる
+/// それぞれのクラスタから選ぶことでできるだけバラバラなものを選べる
+fn kmeans_planning(game: &Game) -> Plan {
+    let num_clusters = (game.graph.m + game.days - 1) / game.days;
+    fn dist(p: (i64, i64), q: (i64, i64)) -> i64 {
+        (p.0 - q.0).pow(2) + (p.1 - q.1).pow(2)
+    }
+    fn add(p: (i64, i64), q: (i64, i64)) -> (i64, i64) {
+        (p.0 + q.0, p.1 + q.1)
+    }
+    let pos: Vec<(i64, i64)> = (0..game.graph.m)
+        .map(|i| {
+            let (u, v, _) = game.graph.edges[i];
+            let (xu, yu) = game.graph.position[u];
+            let (xv, yv) = game.graph.position[v];
+            (xu + xv, yu + yv)
+        })
+        .collect();
+
+    let mut g: Vec<(i64, i64)> = pos[0..num_clusters].iter().cloned().collect();
+    for _ in 0..10 {
+        let mut h = vec![(0, 0); g.len()];
+        for &(x, y) in pos.iter() {
+            let (_, i) = (0..g.len()).map(|i| (dist((x, y), g[i]), i)).min().unwrap();
+            h[i] = add(g[i], (x, y));
+        }
+        g = h;
+    }
+
+    // clusters[i] = クラスタ i に所属するエッジ集合
+    let mut clusters = vec![vec![]; num_clusters];
+    for i in 0..game.graph.m {
+        let (x, y) = pos[i];
+        let (_, k) = (0..g.len()).map(|i| (dist((x, y), g[i]), i)).min().unwrap();
+        clusters[k].push(i);
+    }
+
+    let mut data = vec![vec![]; game.days];
+    let mut num = 0;
+    loop {
+        for d in 0..game.days {
+            for k in 0..num_clusters {
+                if let Some(i) = clusters[k].pop() {
+                    data[d].push(i);
+                    num += 1;
+                }
+            }
+            if num >= game.graph.m {
+                break;
+            }
+        }
+        if num >= game.graph.m {
+            break;
+        }
+    }
+
     Plan::new(data)
 }
 
