@@ -71,13 +71,17 @@ impl Game {
         }
         let dist = Graph::dijkstra_matrix(&g);
         let mut fuman = 0.0;
-        for u in 0..self.graph.n {
-            for v in u + 1..self.graph.n {
+        let mut den = 0.0;
+        for u in 0..dist.len() {
+            for v in 0..dist[u].len() {
+                if u == v {
+                    continue;
+                }
+                den += 1.0;
                 fuman += (dist[u][v] - self.graph.distance[u][v]) as f64;
             }
         }
-        let den = self.graph.n * (self.graph.n - 1) / 2;
-        fuman / den as f64
+        fuman / den
     }
 }
 // }}}
@@ -146,8 +150,10 @@ impl Graph {
         dist
     }
     fn dijkstra_matrix(g: &Vec<Vec<(usize, i64)>>) -> Vec<Vec<i64>> {
+        const SAMPLING_PERCENT: usize = 20;
+        let m = g.len() * SAMPLING_PERCENT / 100;
         let mut dist = vec![];
-        for s in 0..g.len() {
+        for s in 0..m {
             dist.push(Graph::dijkstra(g, s));
         }
         dist
