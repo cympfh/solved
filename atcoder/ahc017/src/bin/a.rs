@@ -217,6 +217,9 @@ fn main() {
     let mut plan = disjoint_planning(&game, norma);
     game.challenge(format!("Disjoin({})", norma).as_str(), &mut plan);
 
+    let mut plan = light_vertex(&game);
+    game.challenge("LightV", &mut plan);
+
     // let mut plan = kmeans_planning(&game);
     // game.challenge("KMeans", &mut plan);
 
@@ -266,6 +269,25 @@ fn disjoint_planning(game: &Game, norma: usize) -> Plan {
         while data[d].len() >= game.k {
             d = (d + 1) % game.days;
         }
+    }
+    Plan::new(data)
+}
+
+/// 頂点に寄与する重みを最小化する
+/// disjoint_planning(norma=game.k) とほぼほぼ同じ結果っぽい
+fn light_vertex(game: &Game) -> Plan {
+    let mut weight = vec![DefaultDict::new(0); game.graph.n];
+    let mut data = vec![vec![]; game.days];
+    for i in 0..game.graph.m {
+        let (u, v, w) = game.graph.edges[i];
+        let (d, _) = (0..game.days)
+            .filter(|&d| data[d].len() < game.k)
+            .map(|d| (d, weight[d][u] + weight[d][v]))
+            .min_by_key(|&(_, w)| w)
+            .unwrap();
+        data[d].push(i);
+        weight[d][u] += w;
+        weight[d][v] += w;
     }
     Plan::new(data)
 }
@@ -329,6 +351,52 @@ fn kmeans_planning(game: &Game) -> Plan {
 
     Plan::new(data)
 }
+
+// {{{ @collections/defaultdict
+/// collections - defaultdict
+#[derive(Debug, Clone)]
+pub struct DefaultDict<K, V>
+where
+    K: Eq + std::hash::Hash,
+{
+    data: std::collections::HashMap<K, V>,
+    default: V,
+}
+impl<K: Eq + std::hash::Hash, V> DefaultDict<K, V> {
+    pub fn new(default: V) -> DefaultDict<K, V> {
+        DefaultDict {
+            data: std::collections::HashMap::new(),
+            default,
+        }
+    }
+    pub fn keys(&self) -> std::collections::hash_map::Keys<K, V> {
+        self.data.keys()
+    }
+    pub fn iter(&self) -> std::collections::hash_map::Iter<K, V> {
+        self.data.iter()
+    }
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+}
+impl<K: Eq + std::hash::Hash, V> std::ops::Index<K> for DefaultDict<K, V> {
+    type Output = V;
+    fn index(&self, key: K) -> &Self::Output {
+        if let Some(val) = self.data.get(&key) {
+            val
+        } else {
+            &self.default
+        }
+    }
+}
+impl<K: Eq + std::hash::Hash + Clone, V: Clone> std::ops::IndexMut<K> for DefaultDict<K, V> {
+    fn index_mut(&mut self, key: K) -> &mut Self::Output {
+        let val = self.default.clone();
+        self.data.entry(key.clone()).or_insert(val);
+        self.data.get_mut(&key).unwrap()
+    }
+}
+// }}}
 
 // {{{
 use std::io::{self, Write};
