@@ -209,9 +209,9 @@ fn main() {
     // let mut plan = baseline(&game);
     // game.challenge("Baseline", &mut plan);
 
-    let norma = game.k;
-    let mut plan = disjoint_planning(&game, norma);
-    game.challenge(format!("Disjoin({})", norma).as_str(), &mut plan);
+    // let norma = game.k;
+    // let mut plan = disjoint_planning(&game, norma);
+    // game.challenge(format!("Disjoin({})", norma).as_str(), &mut plan);
 
     let norma = (game.k + ((game.k + game.days - 1) / game.days)) / 2;
     let mut plan = disjoint_planning(&game, norma);
@@ -219,6 +219,14 @@ fn main() {
 
     let mut plan = light_vertex(&game);
     game.challenge("LightV", &mut plan);
+
+    // let max_depth = 3;
+    // let mut plan = light_vertext_with_randomwalk(&game, max_depth);
+    // game.challenge(format!("LightV/RW({})", max_depth).as_str(), &mut plan);
+
+    let max_depth = 2;
+    let mut plan = light_vertext_with_randomwalk(&game, max_depth);
+    game.challenge(format!("LightV/RW({})", max_depth).as_str(), &mut plan);
 
     // let mut plan = kmeans_planning(&game);
     // game.challenge("KMeans", &mut plan);
@@ -288,6 +296,55 @@ fn light_vertex(game: &Game) -> Plan {
         data[d].push(i);
         weight[d][u] += w;
         weight[d][v] += w;
+    }
+    Plan::new(data)
+}
+
+/// randomwalk 的にエッジの重みを周辺に伝播させてから light_vertex する
+fn light_vertext_with_randomwalk(game: &Game, max_depth: usize) -> Plan {
+    let mut weight = vec![DefaultDict::new(0); game.graph.n];
+    let mut data = vec![vec![]; game.days];
+    for i in 0..game.graph.m {
+        let (u, v, w) = game.graph.edges[i];
+        let mut power = DefaultDict::new(0);
+        {
+            // (u, v) から w を周辺に伝播する
+            let mut stack = vec![(u, w, 0), (v, w, 0)];
+            let mut visited = vec![false; game.graph.n];
+            power[u] = w;
+            power[v] = w;
+            visited[u] = true;
+            visited[v] = true;
+            while let Some((u, w, depth)) = stack.pop() {
+                if depth > max_depth {
+                    continue;
+                }
+                visited[u] = true;
+                let deg = 1;
+                for &(v, _) in game.graph.list[u].iter() {
+                    if visited[v] {
+                        continue;
+                    }
+                    power[v] = w / deg;
+                    stack.push((v, w / deg, depth + 1));
+                }
+            }
+        }
+        let (d, _) = (0..game.days)
+            .filter(|&d| data[d].len() < game.k)
+            .map(|d| {
+                let w: i64 = power
+                    .iter()
+                    .map(|(&u, _): (&usize, &i64)| weight[d][u])
+                    .sum();
+                (d, w)
+            })
+            .min_by_key(|&(_, w)| w)
+            .unwrap();
+        data[d].push(i);
+        for (&u, &w) in power.iter() {
+            weight[d][u] += w;
+        }
     }
     Plan::new(data)
 }
@@ -397,6 +454,78 @@ impl<K: Eq + std::hash::Hash + Clone, V: Clone> std::ops::IndexMut<K> for Defaul
     }
 }
 // }}}
+
+// @num/random/xorshift
+// @num/random/fromu64
+/// Number - Utility - FromU64
+pub trait FromU64 {
+    fn coerce(x: u64) -> Self;
+}
+impl FromU64 for u64 {
+    fn coerce(x: u64) -> Self {
+        x
+    }
+}
+macro_rules! define_fromu64 {
+    ($ty:ty) => {
+        impl FromU64 for $ty {
+            fn coerce(x: u64) -> Self {
+                x as $ty
+            }
+        }
+    };
+}
+define_fromu64!(usize);
+define_fromu64!(u32);
+define_fromu64!(u128);
+define_fromu64!(i32);
+define_fromu64!(i64);
+define_fromu64!(i128);
+impl FromU64 for bool {
+    fn coerce(x: u64) -> Self {
+        x % 2 == 0
+    }
+}
+impl FromU64 for f32 {
+    fn coerce(x: u64) -> Self {
+        (x as f32) / (std::u64::MAX as f32)
+    }
+}
+impl FromU64 for f64 {
+    fn coerce(x: u64) -> Self {
+        (x as f64) / (std::u64::MAX as f64)
+    }
+}
+
+/// Random Number - Xor-Shift Algorithm
+pub struct XorShift(u64);
+impl XorShift {
+    pub fn new() -> Self {
+        XorShift(88_172_645_463_325_252)
+    }
+    fn next(&mut self) -> u64 {
+        let mut x = self.0;
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        self.0 = x;
+        x
+    }
+    pub fn gen<T: FromU64>(&mut self) -> T {
+        T::coerce(self.next())
+    }
+    pub fn shuffle<T: Clone>(&mut self, xs: &Vec<T>) -> Vec<T> {
+        let n = xs.len();
+        let mut xs = xs.clone();
+        for i in (0..n).rev() {
+            let j = self.gen::<usize>() % (i + 1);
+            if i != j {
+                xs.swap(i, j);
+            }
+        }
+        xs
+    }
+}
 
 // {{{
 use std::io::{self, Write};
