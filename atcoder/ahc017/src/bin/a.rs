@@ -42,8 +42,9 @@ impl Game {
         put!(..ans);
     }
     /// スコアが良ければ self.bestplan を更新する
-    fn challenge(&mut self, plan: &mut Plan) {
+    fn challenge(&mut self, name: &str, plan: &mut Plan) {
         self.update_score(plan);
+        eprintln!("[{}]\tscore={}", name, plan.score);
         if self.bestscore <= 0.0 || self.bestscore > plan.score {
             self.bestplan = plan.clone();
             self.bestscore = plan.score;
@@ -206,22 +207,18 @@ fn main() {
 
     // 要らない
     // let mut plan = baseline(&game);
-    // game.challenge(&mut plan);
-    // trace!(#Baseline, plan.score);
+    // game.challenge("Baseline", &mut plan);
 
     let norma = game.k;
     let mut plan = disjoint_planning(&game, norma);
-    game.challenge(&mut plan);
-    trace!(#Disjoint, norma, plan.score);
+    game.challenge(format!("Disjoin({})", norma).as_str(), &mut plan);
 
     let norma = (game.k + ((game.k + game.days - 1) / game.days)) / 2;
     let mut plan = disjoint_planning(&game, norma);
-    game.challenge(&mut plan);
-    trace!(#Disjoint, norma, plan.score);
+    game.challenge(format!("Disjoin({})", norma).as_str(), &mut plan);
 
     // let mut plan = kmeans_planning(&game);
-    // game.challenge(&mut plan);
-    // trace!(#KMeans, plan.score);
+    // game.challenge("KMeans", &mut plan);
 
     trace!(#Score, game.bestscore);
     game.submit();
@@ -238,7 +235,7 @@ fn baseline(game: &Game) -> Plan {
     Plan::new(data)
 }
 
-// 辺どうしが共通頂点を持たないように選ぶ
+/// 辺どうしが共通頂点を持たないように選ぶ
 fn disjoint_planning(game: &Game, norma: usize) -> Plan {
     let mut data = vec![vec![]; game.days];
     let mut edge_ids: BTreeSet<usize> = (0..game.graph.m).collect();
