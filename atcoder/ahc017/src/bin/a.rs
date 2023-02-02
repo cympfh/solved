@@ -13,17 +13,20 @@ struct Game {
     k: usize,
     bestplan: Plan,
     bestscore: f64,
+    num_challenge: usize,
 }
 impl Game {
     fn new(graph: Graph, days: usize, k: usize) -> Self {
         let bestplan = Plan::new(vec![]);
         let bestscore = 0.0;
+        let num_challenge = 0;
         Self {
             graph,
             days,
             k,
             bestplan,
             bestscore,
+            num_challenge,
         }
     }
 }
@@ -44,7 +47,8 @@ impl Game {
     /// スコアが良ければ self.bestplan を更新する
     fn challenge(&mut self, name: &str, plan: &mut Plan) {
         self.update_score(plan);
-        eprintln!("[{}]\tscore={}", name, plan.score);
+        self.num_challenge += 1;
+        eprintln!("[#{} {}]\tscore={}", self.num_challenge, name, plan.score);
         if self.bestscore <= 0.0 || self.bestscore > plan.score {
             self.bestplan = plan.clone();
             self.bestscore = plan.score;
@@ -217,6 +221,7 @@ fn main() {
     // let mut plan = baseline(&game);
     // game.challenge("Baseline", &mut plan);
 
+    // 要らない
     // let norma = game.k;
     // let mut plan = disjoint_planning(&game, norma);
     // game.challenge(format!("Disjoin({})", norma).as_str(), &mut plan);
@@ -225,8 +230,16 @@ fn main() {
     let mut plan = disjoint_planning(&game, norma);
     game.challenge(format!("Disjoin({})", norma).as_str(), &mut plan);
 
+    let norma = (game.k + ((game.k + game.days - 1) / game.days) * 2) / 3;
+    let mut plan = disjoint_planning(&game, norma);
+    game.challenge(format!("Disjoin({})", norma).as_str(), &mut plan);
+
+    let norma = (game.k * 2 + ((game.k + game.days - 1) / game.days)) / 3;
+    let mut plan = disjoint_planning(&game, norma);
+    game.challenge(format!("Disjoin({})", norma).as_str(), &mut plan);
+
     let mut plan = light_vertex(&game);
-    game.challenge("LightV", &mut plan);
+    game.challenge("LightVertex", &mut plan);
 
     for max_depth in 0..5 {
         let mut plan = light_vertext_with_randomwalk(&game, max_depth);
@@ -356,7 +369,7 @@ fn light_vertext_with_randomwalk(game: &Game, max_depth: usize) -> Plan {
 
 /// 実用性がまだない
 /// 辺に座標を割り当てて k-means クラスタリングをやる
-/// それぞれのクラスタから選ぶことでできるだけバラバラなものを選べる
+/// 各クラスタの重心が求まったら各重心からBFSして割り当てる
 fn kmeans_planning(game: &Game, num_cluster: usize) -> Plan {
     fn dist(p: (i64, i64), q: (i64, i64)) -> i64 {
         (p.0 - q.0).pow(2) + (p.1 - q.1).pow(2)
@@ -376,11 +389,17 @@ fn kmeans_planning(game: &Game, num_cluster: usize) -> Plan {
     let mut g: Vec<(i64, i64)> = pos[0..num_cluster].iter().cloned().collect();
     for _ in 0..10 {
         let mut h = vec![(0, 0); g.len()];
+        let mut n = vec![0; g.len()];
         for &(x, y) in pos.iter() {
             let (_, i) = (0..g.len()).map(|i| (dist((x, y), g[i]), i)).min().unwrap();
             h[i] = add(g[i], (x, y));
+            n[i] += 1;
         }
-        g = h;
+        for i in 0..g.len() {
+            if n[i] > 0 {
+                g[i] = (h[i].0 / n[i], h[i].1 / n[i]);
+            }
+        }
     }
 
     // clusters[i] = クラスタ i に所属するエッジ集合
