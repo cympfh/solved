@@ -226,9 +226,9 @@ fn main() {
     let mut plan = light_vertex(&game);
     game.challenge("LightV", &mut plan);
 
-    // let max_depth = 3;
-    // let mut plan = light_vertext_with_randomwalk(&game, max_depth);
-    // game.challenge(format!("LightV/RW({})", max_depth).as_str(), &mut plan);
+    let max_depth = 3;
+    let mut plan = light_vertext_with_randomwalk(&game, max_depth);
+    game.challenge(format!("LightV/RW({})", max_depth).as_str(), &mut plan);
 
     let max_depth = 2;
     let mut plan = light_vertext_with_randomwalk(&game, max_depth);
@@ -326,13 +326,12 @@ fn light_vertext_with_randomwalk(game: &Game, max_depth: usize) -> Plan {
                     continue;
                 }
                 visited[u] = true;
-                let deg = 1;
                 for &(v, _) in game.graph.list[u].iter() {
                     if visited[v] {
                         continue;
                     }
-                    power[v] = w / deg;
-                    stack.push((v, w / deg, depth + 1));
+                    power[v] = w;
+                    stack.push((v, w, depth + 1));
                 }
             }
         }
