@@ -149,6 +149,7 @@ impl Graph {
         }
         dist
     }
+    // SAMPLING_PERCENT=20%, 500ms
     fn dijkstra_matrix(g: &Vec<Vec<(usize, i64)>>) -> Vec<Vec<i64>> {
         const SAMPLING_PERCENT: usize = 20;
         let m = g.len() * SAMPLING_PERCENT / 100;
@@ -231,6 +232,10 @@ fn main() {
     game.challenge(format!("LightV/RW({})", max_depth).as_str(), &mut plan);
 
     let max_depth = 2;
+    let mut plan = light_vertext_with_randomwalk(&game, max_depth);
+    game.challenge(format!("LightV/RW({})", max_depth).as_str(), &mut plan);
+
+    let max_depth = 1;
     let mut plan = light_vertext_with_randomwalk(&game, max_depth);
     game.challenge(format!("LightV/RW({})", max_depth).as_str(), &mut plan);
 
