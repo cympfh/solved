@@ -66,8 +66,8 @@ impl Game {
                 continue;
             }
             let (u, v, w) = self.graph.edges[i];
-            g[u].push((v, w));
-            g[v].push((u, w));
+            g[u].push((v, w, i));
+            g[v].push((u, w, i));
         }
         let dist = Graph::dijkstra_matrix(&g);
         let mut fuman = 0.0;
@@ -92,17 +92,18 @@ struct Graph {
     m: usize,
     position: Vec<(i64, i64)>, // 頂点座標
     edges: Vec<(usize, usize, i64)>,
-    list: Vec<Vec<(usize, i64)>>, // 隣接リスト
-    mat: Vec<Vec<i64>>,           // 隣接行列
-    distance: Vec<Vec<i64>>,      // 点対最短距離 (近似)
+    list: Vec<Vec<(usize, i64, usize)>>, // 隣接リスト, list[u] = [(隣接点, 重み, 辺ID)]
+    mat: Vec<Vec<i64>>,                  // 隣接行列
+    distance: Vec<Vec<i64>>,             // 点対最短距離 (近似)
 }
 impl Graph {
     fn new(n: usize, m: usize, position: Vec<(i64, i64)>, edges: Vec<(usize, usize, i64)>) -> Self {
         let list = {
             let mut g = vec![vec![]; n];
-            for &(u, v, w) in edges.iter() {
-                g[u].push((v, w));
-                g[v].push((u, w));
+            for i in 0..edges.len() {
+                let (u, v, w) = edges[i];
+                g[u].push((v, w, i));
+                g[v].push((u, w, i));
             }
             g
         };
@@ -130,7 +131,7 @@ impl Graph {
     }
 }
 impl Graph {
-    fn dijkstra(g: &Vec<Vec<(usize, i64)>>, s: usize) -> Vec<i64> {
+    fn dijkstra(g: &Vec<Vec<(usize, i64, usize)>>, s: usize) -> Vec<i64> {
         let mut dist = vec![INF; g.len()];
         let mut que = BinaryHeap::new();
         que.push((Reverse(0), s));
@@ -139,7 +140,7 @@ impl Graph {
             if dist[u] != d {
                 continue;
             }
-            for &(v, w) in &g[u] {
+            for &(v, w, _id) in &g[u] {
                 let d2 = d + w;
                 if dist[v] > d2 {
                     dist[v] = d2;
@@ -150,7 +151,7 @@ impl Graph {
         dist
     }
     // SAMPLING_PERCENT=20%, 500ms
-    fn dijkstra_matrix(g: &Vec<Vec<(usize, i64)>>) -> Vec<Vec<i64>> {
+    fn dijkstra_matrix(g: &Vec<Vec<(usize, i64, usize)>>) -> Vec<Vec<i64>> {
         const SAMPLING_PERCENT: usize = 20;
         let m = g.len() * SAMPLING_PERCENT / 100;
         let mut dist = vec![];
@@ -331,7 +332,7 @@ fn light_vertext_with_randomwalk(game: &Game, max_depth: usize) -> Plan {
                     continue;
                 }
                 visited[u] = true;
-                for &(v, _) in game.graph.list[u].iter() {
+                for &(v, _w, _id) in game.graph.list[u].iter() {
                     if visited[v] {
                         continue;
                     }
@@ -465,7 +466,7 @@ impl<K: Eq + std::hash::Hash + Clone, V: Clone> std::ops::IndexMut<K> for Defaul
 }
 // }}}
 
-// @num/random/xorshift
+// {{{ @num/random/xorshift
 // @num/random/fromu64
 /// Number - Utility - FromU64
 pub trait FromU64 {
@@ -536,6 +537,7 @@ impl XorShift {
         xs
     }
 }
+// }}}
 
 // {{{
 use std::io::{self, Write};
