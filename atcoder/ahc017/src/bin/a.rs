@@ -228,6 +228,10 @@ fn main() {
     let mut plan = light_vertex(&game);
     game.challenge("LightV", &mut plan);
 
+    let max_depth = 4;
+    let mut plan = light_vertext_with_randomwalk(&game, max_depth);
+    game.challenge(format!("LightV/RW({})", max_depth).as_str(), &mut plan);
+
     let max_depth = 3;
     let mut plan = light_vertext_with_randomwalk(&game, max_depth);
     game.challenge(format!("LightV/RW({})", max_depth).as_str(), &mut plan);
@@ -237,6 +241,10 @@ fn main() {
     game.challenge(format!("LightV/RW({})", max_depth).as_str(), &mut plan);
 
     let max_depth = 1;
+    let mut plan = light_vertext_with_randomwalk(&game, max_depth);
+    game.challenge(format!("LightV/RW({})", max_depth).as_str(), &mut plan);
+
+    let max_depth = 0;
     let mut plan = light_vertext_with_randomwalk(&game, max_depth);
     game.challenge(format!("LightV/RW({})", max_depth).as_str(), &mut plan);
 
@@ -417,6 +425,49 @@ fn kmeans_planning(game: &Game) -> Plan {
         }
     }
 
+    Plan::new(data)
+}
+
+/// 実用段階にない
+/// 各頂点を重みを分散する
+/// 二分探索で一日あたりの重みを最小化する
+fn distributed_vertex(game: &Game) -> Plan {
+    let mut data = vec![vec![]; game.days];
+    let mut used = vec![false; game.graph.m];
+    for u in 0..game.graph.n {
+        let mut weighted = ndarray![0; game.days]; // 頂点 u 由来で d 日目に与える重み
+                                                   // 許すキャパシティ
+        let mut left = 1;
+        loop {
+            let mut ok = true;
+            for &(_, w, id) in game.graph.list[u].iter() {
+                if used[id] {
+                    continue;
+                };
+                if let Some(d) = (0..game.days).filter(|&d| weighted[d] + w <= left).next() {
+                    weighted[d] += w;
+                } else {
+                    ok = false;
+                    break;
+                }
+            }
+            if ok {
+                break;
+            }
+            left *= 2;
+        }
+        let mut weighted = ndarray![0; game.days]; // 頂点 u 由来で d 日目に与える重み
+        for &(_, w, id) in game.graph.list[u].iter() {
+            if used[id] {
+                continue;
+            };
+            used[id] = true;
+            if let Some(d) = (0..game.days).filter(|&d| weighted[d] + w <= left).next() {
+                weighted[d] += w;
+                data[d].push(id);
+            }
+        }
+    }
     Plan::new(data)
 }
 
