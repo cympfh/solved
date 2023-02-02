@@ -228,28 +228,14 @@ fn main() {
     let mut plan = light_vertex(&game);
     game.challenge("LightV", &mut plan);
 
-    let max_depth = 4;
-    let mut plan = light_vertext_with_randomwalk(&game, max_depth);
-    game.challenge(format!("LightV/RW({})", max_depth).as_str(), &mut plan);
+    for max_depth in 0..5 {
+        let mut plan = light_vertext_with_randomwalk(&game, max_depth);
+        game.challenge(format!("LightV/RW({})", max_depth).as_str(), &mut plan);
+    }
 
-    let max_depth = 3;
-    let mut plan = light_vertext_with_randomwalk(&game, max_depth);
-    game.challenge(format!("LightV/RW({})", max_depth).as_str(), &mut plan);
-
-    let max_depth = 2;
-    let mut plan = light_vertext_with_randomwalk(&game, max_depth);
-    game.challenge(format!("LightV/RW({})", max_depth).as_str(), &mut plan);
-
-    let max_depth = 1;
-    let mut plan = light_vertext_with_randomwalk(&game, max_depth);
-    game.challenge(format!("LightV/RW({})", max_depth).as_str(), &mut plan);
-
-    let max_depth = 0;
-    let mut plan = light_vertext_with_randomwalk(&game, max_depth);
-    game.challenge(format!("LightV/RW({})", max_depth).as_str(), &mut plan);
-
-    // let mut plan = kmeans_planning(&game);
-    // game.challenge("KMeans", &mut plan);
+    // let num_cluster = (game.graph.m + game.days - 1) / game.days;
+    // let mut plan = kmeans_planning(&game, num_cluster);
+    // game.challenge(format!("KMeans({})", num_cluster).as_str(), &mut plan);
 
     trace!(#Score, game.bestscore);
     game.submit();
@@ -371,8 +357,7 @@ fn light_vertext_with_randomwalk(game: &Game, max_depth: usize) -> Plan {
 /// 実用性がまだない
 /// 辺に座標を割り当てて k-means クラスタリングをやる
 /// それぞれのクラスタから選ぶことでできるだけバラバラなものを選べる
-fn kmeans_planning(game: &Game) -> Plan {
-    let num_clusters = (game.graph.m + game.days - 1) / game.days;
+fn kmeans_planning(game: &Game, num_cluster: usize) -> Plan {
     fn dist(p: (i64, i64), q: (i64, i64)) -> i64 {
         (p.0 - q.0).pow(2) + (p.1 - q.1).pow(2)
     }
@@ -388,7 +373,7 @@ fn kmeans_planning(game: &Game) -> Plan {
         })
         .collect();
 
-    let mut g: Vec<(i64, i64)> = pos[0..num_clusters].iter().cloned().collect();
+    let mut g: Vec<(i64, i64)> = pos[0..num_cluster].iter().cloned().collect();
     for _ in 0..10 {
         let mut h = vec![(0, 0); g.len()];
         for &(x, y) in pos.iter() {
@@ -399,7 +384,7 @@ fn kmeans_planning(game: &Game) -> Plan {
     }
 
     // clusters[i] = クラスタ i に所属するエッジ集合
-    let mut clusters = vec![vec![]; num_clusters];
+    let mut clusters = vec![vec![]; num_cluster];
     for i in 0..game.graph.m {
         let (x, y) = pos[i];
         let (_, k) = (0..g.len()).map(|i| (dist((x, y), g[i]), i)).min().unwrap();
@@ -410,7 +395,7 @@ fn kmeans_planning(game: &Game) -> Plan {
     let mut num = 0;
     loop {
         for d in 0..game.days {
-            for k in 0..num_clusters {
+            for k in 0..num_cluster {
                 if let Some(i) = clusters[k].pop() {
                     data[d].push(i);
                     num += 1;
