@@ -1,8 +1,9 @@
 #![allow(unused_imports, unused_macros, dead_code)]
+/// アイデア: サンプリングして地盤の硬さマップを作る
+/// 推定マップの上で最短パスを BFS 探索する
 use std::ops::Range;
 use std::process::exit;
 use std::{cmp::*, collections::*};
-use Hyper::*;
 
 // 水源, W <= 4
 // 家, K <= 10
@@ -24,16 +25,19 @@ struct Game {
     waters: Pset,
     homes: Pset,
     broken: Pset,
+    damage: DefaultDict<P, i128>,
 }
 impl Game {
     fn new(n: i128, c: i128, waters: Pset, homes: Pset) -> Self {
         let broken = BTreeSet::new();
+        let damage = DefaultDict::new(0);
         Self {
             n,
             c,
             waters,
             homes,
             broken,
+            damage,
         }
     }
     /// あるセルの4隣接点
@@ -55,6 +59,7 @@ impl Game {
             return Dig::Broken;
         }
         println!("{} {} {}", p.0, p.1, power);
+        self.damage[p] += power;
         flush();
         let mut sc = Scanner::default();
         let res: i32 = sc.cin();
@@ -131,9 +136,118 @@ impl Game {
         }
         self.waters.extend(appendwaters);
     }
-    /// p から q まで直進した場合の推定コスト
-    fn estimate_cost(&self, p: P, q: P) -> i128 {
-        dist::l2_norm(p, q) * 2
+}
+
+/// 地盤の硬さの推定マップ
+#[derive(Debug, Clone)]
+struct Map {
+    n: i128,
+    data: BTreeMap<P, i128>,
+}
+impl Map {
+    fn new(n: i128) -> Self {
+        let mut data = BTreeMap::new();
+        let avg = 700;
+        for i in 0..n {
+            for j in 0..n {
+                data.insert((i, j), avg);
+            }
+        }
+        Self { n, data }
+    }
+    /// 硬さの推定値
+    fn strength(&self, p: P) -> i128 {
+        let mut r = vec![];
+        let radius = 2;
+        for dx in -radius..=radius {
+            for dy in -radius..=radius {
+                let l2 = dx * dx + dy * dy;
+                let x = p.0 + dx;
+                let y = p.1 + dy;
+                if x < 0 || y < 0 || x >= self.n || y >= self.n {
+                    continue;
+                }
+                if l2 <= 4 {
+                    if let Some(&s) = self.data.get(&(x, y)) {
+                        r.push(s);
+                    }
+                }
+            }
+        }
+        if r.is_empty() {
+            0
+        } else {
+            r.iter().sum::<i128>() / r.len() as i128
+        }
+    }
+    /// p 周辺は strength であると推定する
+    /// coreraidus 以下は strength を代入
+    /// radius 以下は strength と現在推定値の平均を取る
+    fn set(&mut self, p: P, strength: i128, coreradius: i128, radius: i128) {
+        for dx in -radius..=radius {
+            for dy in -radius..=radius {
+                let l2 = dx * dx + dy * dy;
+                let x = p.0 + dx;
+                let y = p.1 + dy;
+                if x < 0 || y < 0 || x >= self.n || y >= self.n {
+                    continue;
+                }
+                if l2 < coreradius.pow(2) {
+                    self.data.insert((x, y), strength);
+                } else if l2 < radius.pow(2) {
+                    let s = self.data.get(&(x, y)).unwrap();
+                    let s = (s + strength) / 2;
+                    self.data.insert((x, y), s);
+                }
+            }
+        }
+    }
+    /// サンプリングして地盤の硬さを調べる
+    fn scan(&mut self, game: &mut Game) {
+        const N: i128 = 20;
+        let coreradius = 5;
+        let radius = 10;
+        let pows = vec![50, 100, 500, 1000];
+        for i in 0..N {
+            for j in 0..N {
+                let x = game.n / N * i;
+                let y = game.n / N * j;
+                let mut accumulate = 0;
+                for &power in pows.iter() {
+                    accumulate += power;
+                    let res = game.dig((x, y), power);
+                    if res == Dig::Broken {
+                        self.set((x, y), accumulate, coreradius, radius);
+                        break;
+                    } else if power == pows[pows.len() - 1] {
+                        self.set((x, y), accumulate * 2, coreradius, radius);
+                    }
+                }
+            }
+        }
+    }
+    /// 推定されたマップの可視化
+    fn dump(&self) {
+        #[cfg(debug_assertions)]
+        for i in 0..40 {
+            for j in 0..40 {
+                let x = i * 5;
+                let y = j * 5;
+                let s = self.strength((x, y));
+                eprint!(
+                    "{}",
+                    match s {
+                        _ if s < 20 => ' ',
+                        _ if s < 100 => '.',
+                        _ if s < 400 => '-',
+                        _ if s < 700 => '+',
+                        _ if s < 1500 => '*',
+                        _ => '#',
+                    }
+                );
+            }
+            eprintln!();
+        }
     }
 }
 
@@ -162,6 +276,9 @@ fn main() {
     trace!(&waters);
     trace!(&homes);
     let mut game = Game::new(n, c, waters, homes);
+    let mut map = Map::new(n);
+    map.scan(&mut game);
+    map.dump();
 
     // 全ての家のセルを先に破壊する
     {
@@ -179,7 +296,6 @@ fn main() {
         }
     }
 
-    let power = 500;
     loop {
         trace!(#loop);
 
@@ -209,17 +325,14 @@ fn main() {
 
         for &(home, _w, _d) in nearest.iter() {
             trace!(home);
-
-            // A*-search, f*=g*+h*; g* はスタートからの距離, h* は残りの推定
             let mut q = BinaryHeap::new();
             let mut checked = BTreeSet::new();
             for &w in game.waters.iter() {
-                let h = game.estimate_cost(home, w);
-                q.push((Reverse(h), 0, h, w));
+                q.push((Reverse(0), w));
             }
-            let mut cannot_broken = 0;
-            const NUM: usize = 5;
-            while let Some((Reverse(_), g, h, u)) = q.pop() {
+            let mut from = BTreeMap::new();
+            trace!(#Astar);
+            while let Some((Reverse(cost), u)) = q.pop() {
                 if checked.contains(&u) {
                     continue;
                 }
@@ -231,28 +344,30 @@ fn main() {
                     if game.waters.contains(&v) {
                         continue;
                     }
-                    println!("# [A*] g, h = {}, {}", g, h);
-                    let res = game.dig(v, power);
-                    if res == Dig::Broken {
-                        let h = game.estimate_cost(v, home);
-                        q.push((Reverse(g + h), g, h, v));
-                    } else {
-                        let h = game.estimate_cost(v, home);
-                        q.push((Reverse(g + h + 1), g + 1, h, v));
-                        cannot_broken += 1;
-                        if cannot_broken >= NUM {
-                            break;
-                        }
+                    if checked.contains(&v) {
+                        continue;
                     }
+                    let appendcost = map.strength(v) - game.damage[v];
+                    from.insert(v, u);
+                    q.push((Reverse(cost + appendcost), v));
                 }
-                if cannot_broken >= NUM {
+            }
+            trace!(#done);
+            let mut path = vec![home];
+            while let Some(&prev) = from.get(&path[path.len() - 1]) {
+                trace!(path[path.len() - 1], prev);
+                path.push(prev);
+                if game.waters.contains(&prev) {
                     break;
                 }
             }
+            for p in path {
+                game.dig_full(p);
+            }
+            trace!(#waterflow);
             game.waterflow();
         }
-        // power = power * 2;
-        // power = min!(power, 5000);
+        break;
     }
 }
 
@@ -507,52 +622,6 @@ pub mod dist {
     }
 }
 
-/// ps を頂点とする kNN グラフを作る
-/// 近似で作る: https://cympfh.cc/paper/eff-knn-graph
-fn knn_graph(
-    ps: &BTreeSet<(i128, i128)>,
-    k: usize,
-) -> BTreeMap<(i128, i128), Vec<((i128, i128), i128)>> {
-    let ps: Vec<(i128, i128)> = ps.iter().cloned().collect();
-    let n = ps.len();
-    let mut rand = XorShift::new();
-
-    let mut knn = BTreeMap::new(); // p から見た有向 k-近傍
-    for &p in ps.iter() {
-        let idx = rand.sample(0..n, k + 1);
-        let mut nears = BinaryHeap::new();
-        for i in idx {
-            let q = ps[i];
-            let d = dist::manhattan(p, q);
-            nears.push((Reverse(d), q));
-        }
-        knn.insert(p, nears);
-    }
-    // p の (無向) 近傍, これは knn に逆辺を加えたもの
-    let mut u = knn.clone();
-    for &p in ps.iter() {
-        for &(Reverse(d), q) in knn[&p].iter() {
-            u.entry(q).and_modify(|nears| nears.push((Reverse(d), p)));
-        }
-    }
-
-    // TODO(ここに肝心のアルゴリズムを各)
-
-    // knn を隣接リストに変換して返却
-    // 自己辺を除く
-    let mut neigh = BTreeMap::new();
-    for &p in ps.iter() {
-        let mut nears = vec![];
-        for &(Reverse(d), q) in knn[&p].iter() {
-            if p != q {
-                nears.push((q, d));
-            }
-        }
-        neigh.insert(p, nears);
-    }
-    neigh
-}
-
 // @num/random/xorshift
 // @num/random/fromu64
 /// Number - Utility - FromU64
@@ -631,6 +700,51 @@ impl XorShift {
             r.sort();
             r
         }
+    }
+}
+
+// @collections/defaultdict
+/// collections - defaultdict
+#[derive(Debug, Clone)]
+pub struct DefaultDict<K, V>
+where
+    K: Eq + std::hash::Hash,
+{
+    data: std::collections::HashMap<K, V>,
+    default: V,
+}
+impl<K: Eq + std::hash::Hash, V> DefaultDict<K, V> {
+    pub fn new(default: V) -> DefaultDict<K, V> {
+        DefaultDict {
+            data: std::collections::HashMap::new(),
+            default,
+        }
+    }
+    pub fn keys(&self) -> std::collections::hash_map::Keys<K, V> {
+        self.data.keys()
+    }
+    pub fn iter(&self) -> std::collections::hash_map::Iter<K, V> {
+        self.data.iter()
+    }
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+}
+impl<K: Eq + std::hash::Hash, V> std::ops::Index<K> for DefaultDict<K, V> {
+    type Output = V;
+    fn index(&self, key: K) -> &Self::Output {
+        if let Some(val) = self.data.get(&key) {
+            val
+        } else {
+            &self.default
+        }
+    }
+}
+impl<K: Eq + std::hash::Hash + Clone, V: Clone> std::ops::IndexMut<K> for DefaultDict<K, V> {
+    fn index_mut(&mut self, key: K) -> &mut Self::Output {
+        let val = self.default.clone();
+        self.data.entry(key.clone()).or_insert(val);
+        self.data.get_mut(&key).unwrap()
     }
 }
 
