@@ -4,6 +4,9 @@ use std::process::exit;
 use std::{cmp::*, collections::*};
 use Hyper::*;
 
+// 水源, W <= 4
+// 家, K <= 10
+
 type P = (i128, i128);
 type Pset = BTreeSet<P>;
 
@@ -182,82 +185,34 @@ fn main() {
     }
 
     loop {
-        // 各家から水源までの最短路を見つける
-        let mut ps: Pset = BTreeSet::new();
-        ps.extend(game.homes.clone());
-        for i in 0..game.n {
-            for j in 0..game.n {
-                let p = (i, j);
-                if !game.homes.contains(&p) && !game.waters.contains(&p) && game.broken.contains(&p)
-                {
-                    ps.insert((i, j));
-                }
-            }
-        }
-        // 家+空きマスで kNN グラフ
-        let mut neigh = knn_graph(&ps, 2);
-        // 全点 -> 水源を追加
-        for &p in ps.iter() {
-            for &w in game.waters.iter() {
-                let d = dist(p, w);
-                neigh.entry(p).and_modify(|nears| nears.push((w, d)));
-            }
-        }
-        ps.extend(game.waters.clone());
+        // 家 vs 最近水源の割当
+        let mut nearest: Vec<(P, P, i128)> = {
+            game.homes
+                .iter()
+                .filter(|&home| {
+                    // まだ水源が引かれてない家
+                    !game.waters.contains(&home)
+                })
+                .map(|&home| {
+                    let (d, w) = game
+                        .waters
+                        .iter()
+                        .map(|&w| {
+                            let d = dist(home, w);
+                            (d, w)
+                        })
+                        .min()
+                        .unwrap();
+                    (home, w, d)
+                })
+                .collect()
+        };
+        nearest.sort_by_key(|&(_, _, d)| d);
+        trace!(&nearest);
 
-        let memo: BTreeMap<P, Hyper<i128>> = ps.iter().map(|&p| (p, Inf)).collect();
-        for home in game.homes.clone() {
-            // すでに水路が引かれている
-            if game.waters.contains(&home) {
-                continue;
-            }
-            // Dijkstra-path
-            let path: Vec<(i128, i128)> = {
-                let mut path = vec![];
-                let mut memo = memo.clone();
-                memo.insert(home, Real(0));
-                let mut from = BTreeMap::new();
-                let mut q = BinaryHeap::new();
-                q.push((Reverse(Real(0)), home));
-                while let Some((Reverse(d), u)) = q.pop() {
-                    if memo[&u] != d {
-                        continue;
-                    }
-                    // goal.
-                    if game.waters.contains(&u) {
-                        path.push(u);
-                        loop {
-                            let last = path[path.len() - 1];
-                            if let Some(&v) = from.get(&last) {
-                                path.push(v);
-                                continue;
-                            }
-                            break;
-                        }
-                        break;
-                    }
-                    for &(v, d) in neigh[&u].iter() {
-                        let d = d as i128;
-                        if memo[&v] > memo[&u] + d {
-                            memo.insert(v, memo[&u] + d);
-                            from.insert(v, u);
-                            q.push((Reverse(memo[&v]), v));
-                        }
-                    }
-                }
-                path
-            };
-            println!(
-                "# Dijkstra path: home=({:?}) -> water=({:?})",
-                path[path.len() - 1],
-                path[0],
-            );
-            trace!(&path);
-            for i in 1..path.len() {
-                let p = path[i - 1];
-                let q = path[i];
-                game.dig_line(p, q, 1.0, 500, 20);
-            }
+        for &(home, w, _d) in nearest.iter() {
+            trace!(home, w);
+            game.dig_line(w, home, 1.0, 500, 20);
             game.waterflow();
         }
     }
