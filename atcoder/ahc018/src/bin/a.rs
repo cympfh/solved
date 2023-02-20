@@ -221,8 +221,11 @@ impl Map {
         let pows = vec![20, 50, 100, 500, 1000];
         for i in 0..=N {
             for j in 0..=N {
-                let x = min!(width / 2 + width * i, game.n - 1);
-                let y = min!(width / 2 + width * j, game.n - 1);
+                let x = width / 2 + width * i;
+                let y = width / 2 + width * j;
+                if x >= game.n || y >= game.n {
+                    continue;
+                }
 
                 if !rects.iter().any(|r| r.contains((x, y), radius)) {
                     continue;
