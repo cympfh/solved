@@ -204,7 +204,7 @@ impl Map {
     }
     /// サンプリングして地盤の硬さを調べる
     fn scan(&mut self, game: &mut Game) {
-        const N: i128 = 20;
+        const N: i128 = 20; // サンプル数
         let coreradius = 5;
         let radius = 10;
         let pows = vec![50, 100, 500, 1000];
@@ -212,6 +212,7 @@ impl Map {
             for j in 0..N {
                 let x = game.n / N * i;
                 let y = game.n / N * j;
+                println!("# Scan {:?}", (x, y));
                 let mut accumulate = 0;
                 for &power in pows.iter() {
                     accumulate += power;
@@ -348,7 +349,11 @@ fn main() {
                     if checked.contains(&v) {
                         continue;
                     }
-                    let appendcost = map.strength(v) - game.damage[v];
+                    let appendcost = if game.broken.contains(&v) {
+                        0
+                    } else {
+                        game.c + map.strength(v) - game.damage[v]
+                    };
                     from.insert(v, u);
                     let h = dist::manhattan(v, home);
                     q.push((Reverse((h + cost + appendcost, cost + appendcost)), v));
@@ -365,7 +370,9 @@ fn main() {
             }
             for p in path {
                 let estimated_power = map.strength(p) - game.damage[p];
-                game.dig(p, estimated_power);
+                if estimated_power > 0 {
+                    game.dig(p, estimated_power);
+                }
                 game.dig_full(p);
             }
             trace!(#waterflow);

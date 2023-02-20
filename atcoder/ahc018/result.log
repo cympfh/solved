@@ -68,3 +68,27 @@ Problem = 0096	Total Cost = 302895
 Problem = 0097	Total Cost = 386659
 Problem = 0098	Total Cost = 479589
 Problem = 0099	Total Cost = 463234
+
+Mon 20 Feb 2023 08:46:19 PM JST
+735ddffb023144cd4581593132dcd789c2f91a71
+小さい bugfix & すでに壊したマスはコストゼロにする
+Problem = 0080	Total Cost = 335737
+Problem = 0081	Total Cost = 329151
+Problem = 0082	Total Cost = 536854
+Problem = 0083	Total Cost = 419205
+Problem = 0084	Total Cost = 518729
+Problem = 0085	Total Cost = 308189
+Problem = 0086	Total Cost = 347637
+Problem = 0087	Total Cost = 709801
+Problem = 0088	Total Cost = 693903
+Problem = 0089	Total Cost = 237897
+Problem = 0090	Total Cost = 562635
+Problem = 0091	Total Cost = 377671
+Problem = 0092	Total Cost = 315370
+Problem = 0093	Total Cost = 528222
+Problem = 0094	Total Cost = 311910
+Problem = 0095	Total Cost = 452494
+Problem = 0096	Total Cost = 302996
+Problem = 0097	Total Cost = 391863
+Problem = 0098	Total Cost = 479087
+Problem = 0099	Total Cost = 459528

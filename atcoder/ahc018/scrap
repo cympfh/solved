@@ -1,15 +1,6 @@
-    /// ある点が硬いと推測
-    fn strong(&mut self, p: P) {
-        let radius = 2;
-        for x in p.0 - radius..=p.0 + radius {
-            for y in p.1 - radius..=p.1 + radius {
-                if (x - p.0).pow(2) + (y - p.1).pow(2) <= radius.pow(2) {
-                    self.strength.entry(p).and_modify(|val| *val += 1);
-                }
-            }
-        }
-    }
-
-        // for p in self.neigh(p) {
-        //     self.strength.entry(p).and_modify(|val| *val += 1);
-        // }
+        const N: i128 = 20; // サンプル数
+        let coreradius = 100 / N / 2;
+        let radius = 200 / N;
+        // let pows = vec![50, 100, 500, 1000];
+        // let pows = vec![50, 100, 200, 500];
+        let pows = vec![50, 100, 200, 500, 1000, 2000, 4000];
