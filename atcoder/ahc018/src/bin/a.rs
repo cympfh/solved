@@ -240,7 +240,7 @@ impl Map {
                         self.set((x, y), accumulate, coreradius, radius);
                         break;
                     } else if power == pows[pows.len() - 1] {
-                        self.set((x, y), accumulate * 2, coreradius, radius);
+                        self.set((x, y), 4800, coreradius, radius);
                     }
                 }
             }
