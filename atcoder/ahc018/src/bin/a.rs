@@ -214,7 +214,7 @@ impl Map {
             }
         }
 
-        const N: i128 = 20; // サンプル数
+        const N: i128 = 13; // サンプル数
         let width = game.n / N;
         let coreradius = width - 3;
         let radius = width;

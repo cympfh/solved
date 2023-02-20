@@ -116,3 +116,51 @@ Problem = 0096	Total Cost = 258313
 Problem = 0097	Total Cost = 310956
 Problem = 0098	Total Cost = 449234
 Problem = 0099	Total Cost = 253231
+
+Mon 20 Feb 2023 09:22:02 PM JST
+a3eb2596830ddab7bcfac3ef49b1b74fc13a4bf0
+細かい修正
+Problem = 0080	Total Cost = 324067
+Problem = 0081	Total Cost = 247301
+Problem = 0082	Total Cost = 491576
+Problem = 0083	Total Cost = 362639
+Problem = 0084	Total Cost = 451710
+Problem = 0085	Total Cost = 283137
+Problem = 0086	Total Cost = 234666
+Problem = 0087	Total Cost = 536584
+Problem = 0088	Total Cost = 514265
+Problem = 0089	Total Cost = 230844
+Problem = 0090	Total Cost = 447084
+Problem = 0091	Total Cost = 306409
+Problem = 0092	Total Cost = 246126
+Problem = 0093	Total Cost = 495523
+Problem = 0094	Total Cost = 185181
+Problem = 0095	Total Cost = 358110
+Problem = 0096	Total Cost = 258369
+Problem = 0097	Total Cost = 303918
+Problem = 0098	Total Cost = 434993
+Problem = 0099	Total Cost = 248807
+
+Mon 20 Feb 2023 09:22:29 PM JST
+a3eb2596830ddab7bcfac3ef49b1b74fc13a4bf0
+スキャンのサンプル数を N=20 から N=13 に
+Problem = 0080	Total Cost = 212760
+Problem = 0081	Total Cost = 292964
+Problem = 0082	Total Cost = 506913
+Problem = 0083	Total Cost = 216118
+Problem = 0084	Total Cost = 380908
+Problem = 0085	Total Cost = 213668
+Problem = 0086	Total Cost = 154985
+Problem = 0087	Total Cost = 757954
+Problem = 0088	Total Cost = 464167
+Problem = 0089	Total Cost = 114475
+Problem = 0090	Total Cost = 310542
+Problem = 0091	Total Cost = 220328
+Problem = 0092	Total Cost = 293167
+Problem = 0093	Total Cost = 301852
+Problem = 0094	Total Cost = 171038
+Problem = 0095	Total Cost = 301475
+Problem = 0096	Total Cost = 362241
+Problem = 0097	Total Cost = 253861
+Problem = 0098	Total Cost = 285084
+Problem = 0099	Total Cost = 176109
