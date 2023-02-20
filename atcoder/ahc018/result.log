@@ -23,6 +23,7 @@ Problem = 0099	Total Cost = 464628
 
 Mon 20 Feb 2023 08:26:22 PM JST
 325541fcf2cb440489b13b2833fd6031fd6524a1
+推定する残りダメージだけ与える
 Problem = 0080	Total Cost = 335628
 Problem = 0081	Total Cost = 327807
 Problem = 0082	Total Cost = 542244
@@ -43,3 +44,27 @@ Problem = 0096	Total Cost = 301938
 Problem = 0097	Total Cost = 386802
 Problem = 0098	Total Cost = 479865
 Problem = 0099	Total Cost = 462866
+
+Mon 20 Feb 2023 08:29:37 PM JST
+6bc0f9317a287f4bb3463d8f124e1b005d9bc7ac
+マンハッタン距離を追加して A* 探索
+Problem = 0080	Total Cost = 334527
+Problem = 0081	Total Cost = 327725
+Problem = 0082	Total Cost = 539467
+Problem = 0083	Total Cost = 419232
+Problem = 0084	Total Cost = 519959
+Problem = 0085	Total Cost = 307842
+Problem = 0086	Total Cost = 347419
+Problem = 0087	Total Cost = 717225
+Problem = 0088	Total Cost = 698764
+Problem = 0089	Total Cost = 237834
+Problem = 0090	Total Cost = 565908
+Problem = 0091	Total Cost = 378932
+Problem = 0092	Total Cost = 313744
+Problem = 0093	Total Cost = 518790
+Problem = 0094	Total Cost = 312257
+Problem = 0095	Total Cost = 453697
+Problem = 0096	Total Cost = 302895
+Problem = 0097	Total Cost = 386659
+Problem = 0098	Total Cost = 479589
+Problem = 0099	Total Cost = 463234

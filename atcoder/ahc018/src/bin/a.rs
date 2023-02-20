@@ -328,11 +328,12 @@ fn main() {
             let mut q = BinaryHeap::new();
             let mut checked = BTreeSet::new();
             for &w in game.waters.iter() {
-                q.push((Reverse(0), w));
+                let h = dist::manhattan(w, home);
+                q.push((Reverse((h, 0)), w));
             }
             let mut from = BTreeMap::new();
             trace!(#Astar);
-            while let Some((Reverse(cost), u)) = q.pop() {
+            while let Some((Reverse((_, cost)), u)) = q.pop() {
                 if checked.contains(&u) {
                     continue;
                 }
@@ -349,7 +350,8 @@ fn main() {
                     }
                     let appendcost = map.strength(v) - game.damage[v];
                     from.insert(v, u);
-                    q.push((Reverse(cost + appendcost), v));
+                    let h = dist::manhattan(v, home);
+                    q.push((Reverse((h + cost + appendcost, cost + appendcost)), v));
                 }
             }
             trace!(#done);
