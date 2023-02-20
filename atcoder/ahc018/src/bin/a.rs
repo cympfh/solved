@@ -75,6 +75,9 @@ impl Game {
     }
     /// 確実に掘れるまで掘る
     fn dig_full(&mut self, p: P) {
+        if self.broken.contains(&p) {
+            return;
+        }
         println!("# Digging full({:?})", &p);
         let powers = vec![100, 500, 1000, 5000];
         for power in powers {
@@ -204,14 +207,27 @@ impl Map {
     }
     /// サンプリングして地盤の硬さを調べる
     fn scan(&mut self, game: &mut Game) {
+        let mut rects = vec![];
+        for h in game.homes.clone() {
+            for w in game.waters.clone() {
+                rects.push(Rect(h, w));
+            }
+        }
+
         const N: i128 = 20; // サンプル数
-        let coreradius = 5;
-        let radius = 10;
-        let pows = vec![50, 100, 500, 1000];
-        for i in 0..N {
-            for j in 0..N {
-                let x = game.n / N * i;
-                let y = game.n / N * j;
+        let width = game.n / N;
+        let coreradius = width - 3;
+        let radius = width;
+        let pows = vec![20, 50, 100, 500, 1000];
+        for i in 0..=N {
+            for j in 0..=N {
+                let x = min!(width / 2 + width * i, game.n - 1);
+                let y = min!(width / 2 + width * j, game.n - 1);
+
+                if !rects.iter().any(|r| r.contains((x, y), radius)) {
+                    continue;
+                }
+
                 println!("# Scan {:?}", (x, y));
                 let mut accumulate = 0;
                 for &power in pows.iter() {
@@ -362,7 +378,6 @@ fn main() {
             trace!(#done);
             let mut path = vec![home];
             while let Some(&prev) = from.get(&path[path.len() - 1]) {
-                trace!(path[path.len() - 1], prev);
                 path.push(prev);
                 if game.waters.contains(&prev) {
                     break;
@@ -371,7 +386,12 @@ fn main() {
             for p in path {
                 let estimated_power = map.strength(p) - game.damage[p];
                 if estimated_power > 0 {
-                    game.dig(p, estimated_power);
+                    println!(
+                        "# estimate_strength={}, damaged={}",
+                        map.strength(p),
+                        game.damage[p]
+                    );
+                    game.dig(p, estimated_power + 10);
                 }
                 game.dig_full(p);
             }
@@ -756,6 +776,23 @@ impl<K: Eq + std::hash::Hash + Clone, V: Clone> std::ops::IndexMut<K> for Defaul
         let val = self.default.clone();
         self.data.entry(key.clone()).or_insert(val);
         self.data.get_mut(&key).unwrap()
+    }
+}
+
+struct Rect(P, P);
+impl Rect {
+    fn contains(&self, p: P, padding: i128) -> bool {
+        let left = min!(self.0 .0, self.1 .0);
+        let right = max!(self.0 .0, self.1 .0);
+        if p.0 < left - padding || right + padding < p.0 {
+            return false;
+        }
+        let left = min!(self.0 .1, self.1 .1);
+        let right = max!(self.0 .1, self.1 .1);
+        if p.1 < left - padding || right + padding < p.1 {
+            return false;
+        }
+        true
     }
 }
 
