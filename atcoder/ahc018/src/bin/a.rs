@@ -42,7 +42,7 @@ impl Game {
         let mut r = vec![];
         for &(dx, dy) in dxy.iter() {
             let q = (p.0 + dx, p.1 + dy);
-            if q.0 < 0 || q.0 > self.n || q.1 < 0 || q.1 > self.n {
+            if q.0 < 0 || q.0 >= self.n || q.1 < 0 || q.1 >= self.n {
                 continue;
             }
             r.push(q);
@@ -70,6 +70,7 @@ impl Game {
     }
     /// 確実に掘れるまで掘る
     fn dig_full(&mut self, p: P) {
+        println!("# Digging full({:?})", &p);
         let powers = vec![100, 500, 1000, 5000];
         for power in powers {
             self.dig(p, power);
@@ -87,7 +88,7 @@ impl Game {
     }
     /// 線分上を掘る
     /// 厚みを持たせてやや周りも掘る
-    fn dig_line(&mut self, s: P, t: P, width: f64, power: i128, akirame: usize) {
+    fn dig_line(&mut self, s: P, t: P, width: f64, power: i128) {
         println!("# Digging line({:?} => {:?})", s, t);
         fn to(a: i128, b: i128) -> Vec<i128> {
             if a <= b {
@@ -96,24 +97,14 @@ impl Game {
                 (b..=a).rev().collect()
             }
         }
-        let mut num = 0;
         for x in to(s.0, t.0) {
             for y in to(s.1, t.1) {
                 let k = ((t.1 - s.1) * x - (t.0 - s.0) * y - (t.1 - s.1) * s.0 + (t.0 - s.0) * s.1)
                     .abs() as f64;
                 let den = (((t.0 - s.0).pow(2) + (t.1 - s.1).pow(2)) as f64).sqrt();
-                let dist = k / den;
-                if dist <= width {
-                    let res = self.dig((x, y), power);
-                    if res == Dig::Rest {
-                        num += 1
-                    } else {
-                        num = 0;
-                    }
-                    if num >= 5 {
-                        println!("# akirame");
-                        return;
-                    }
+                let d = k / den;
+                if d <= width {
+                    self.dig((x, y), power);
                 }
             }
         }
@@ -139,6 +130,10 @@ impl Game {
             }
         }
         self.waters.extend(appendwaters);
+    }
+    /// p から q まで直進した場合の推定コスト
+    fn estimate_cost(&self, p: P, q: P) -> i128 {
+        dist::l2_norm(p, q) * 2
     }
 }
 
@@ -184,7 +179,10 @@ fn main() {
         }
     }
 
+    let power = 500;
     loop {
+        trace!(#loop);
+
         // 家 vs 最近水源の割当
         let mut nearest: Vec<(P, P, i128)> = {
             game.homes
@@ -198,7 +196,7 @@ fn main() {
                         .waters
                         .iter()
                         .map(|&w| {
-                            let d = dist(home, w);
+                            let d = dist::manhattan(home, w);
                             (d, w)
                         })
                         .min()
@@ -208,13 +206,53 @@ fn main() {
                 .collect()
         };
         nearest.sort_by_key(|&(_, _, d)| d);
-        trace!(&nearest);
 
-        for &(home, w, _d) in nearest.iter() {
-            trace!(home, w);
-            game.dig_line(w, home, 1.0, 500, 20);
+        for &(home, _w, _d) in nearest.iter() {
+            trace!(home);
+
+            // A*-search, f*=g*+h*; g* はスタートからの距離, h* は残りの推定
+            let mut q = BinaryHeap::new();
+            let mut checked = BTreeSet::new();
+            for &w in game.waters.iter() {
+                let h = game.estimate_cost(home, w);
+                q.push((Reverse(h), 0, h, w));
+            }
+            let mut cannot_broken = 0;
+            const NUM: usize = 5;
+            while let Some((Reverse(_), g, h, u)) = q.pop() {
+                if checked.contains(&u) {
+                    continue;
+                }
+                if u == home {
+                    break;
+                }
+                checked.insert(u);
+                for v in game.neigh(u) {
+                    if game.waters.contains(&v) {
+                        continue;
+                    }
+                    println!("# [A*] g, h = {}, {}", g, h);
+                    let res = game.dig(v, power);
+                    if res == Dig::Broken {
+                        let h = game.estimate_cost(v, home);
+                        q.push((Reverse(g + h), g, h, v));
+                    } else {
+                        let h = game.estimate_cost(v, home);
+                        q.push((Reverse(g + h + 1), g + 1, h, v));
+                        cannot_broken += 1;
+                        if cannot_broken >= NUM {
+                            break;
+                        }
+                    }
+                }
+                if cannot_broken >= NUM {
+                    break;
+                }
+            }
             game.waterflow();
         }
+        // power = power * 2;
+        // power = min!(power, 5000);
     }
 }
 
@@ -456,8 +494,17 @@ impl<X: Clone + AGroup> std::ops::AddAssign<X> for Hyper<X> {
     }
 }
 
-fn dist(x: (i128, i128), y: (i128, i128)) -> i128 {
-    (x.0 - y.0).abs() + (x.1 - y.1).abs()
+pub mod dist {
+    pub fn manhattan(x: (i128, i128), y: (i128, i128)) -> i128 {
+        (x.0 - y.0).abs() + (x.1 - y.1).abs()
+    }
+    pub fn l2(x: (i128, i128), y: (i128, i128)) -> i128 {
+        (x.0 - y.0).pow(2) + (x.1 - y.1).pow(2)
+    }
+    pub fn l2_norm(x: (i128, i128), y: (i128, i128)) -> i128 {
+        let d2 = (x.0 - y.0).pow(2) + (x.1 - y.1).pow(2);
+        (d2 as f64).sqrt() as i128
+    }
 }
 
 /// ps を頂点とする kNN グラフを作る
@@ -476,7 +523,7 @@ fn knn_graph(
         let mut nears = BinaryHeap::new();
         for i in idx {
             let q = ps[i];
-            let d = dist(p, q);
+            let d = dist::manhattan(p, q);
             nears.push((Reverse(d), q));
         }
         knn.insert(p, nears);
@@ -645,6 +692,10 @@ macro_rules! max {
 }
 #[macro_export]
 macro_rules! trace {
+    (# $x:ident) => {
+        #[cfg(debug_assertions)]
+        eprintln!("[{}]", stringify!($x));
+    };
     ($x:expr) => {
         #[cfg(debug_assertions)]
         eprintln!(">>> {} = {:?}", stringify!($x), $x)
