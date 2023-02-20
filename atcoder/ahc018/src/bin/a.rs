@@ -362,8 +362,8 @@ fn main() {
                 }
             }
             for p in path {
-                // let estimated_power = map.strength(p) - game.damage[p];
-                // game.dig(p, estimated_power);
+                let estimated_power = map.strength(p) - game.damage[p];
+                game.dig(p, estimated_power);
                 game.dig_full(p);
             }
             trace!(#waterflow);
