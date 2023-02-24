@@ -213,24 +213,21 @@ impl Map {
                 rects.push(Rect(h, w));
             }
         }
-
-        const N: i128 = 12; // サンプル数
+        const N: i128 = 14; // サンプル数
         let width = game.n / N;
         let coreradius = width / 2;
         let radius = width * 2 / 3;
-        let pows = vec![20, 50, 100, 500, 1000];
+        let pows = vec![20, 50, 100, 500];
         for i in 0..=N {
             for j in 0..=N {
-                let x = width / 2 + width * i;
-                let y = width / 2 + width * j;
+                let x = width * i;
+                let y = width * j;
                 if x >= game.n || y >= game.n {
                     continue;
                 }
-
                 if !rects.iter().any(|r| r.contains((x, y), radius)) {
                     continue;
                 }
-
                 println!("# Scan {:?}", (x, y));
                 let mut accumulate = 0;
                 for &power in pows.iter() {
