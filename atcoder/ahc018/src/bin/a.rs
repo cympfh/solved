@@ -216,8 +216,8 @@ impl Map {
 
         const N: i128 = 12; // サンプル数
         let width = game.n / N;
-        let coreradius = width - 3;
-        let radius = width;
+        let coreradius = width / 2;
+        let radius = width * 2 / 3;
         let pows = vec![20, 50, 100, 500, 1000];
         for i in 0..=N {
             for j in 0..=N {
@@ -249,24 +249,28 @@ impl Map {
     /// 推定されたマップの可視化
     fn dump(&self) {
         #[cfg(debug_assertions)]
-        for i in 0..40 {
-            for j in 0..40 {
-                let x = i * 5;
-                let y = j * 5;
-                let s = self.strength((x, y));
-                eprint!(
-                    "{}",
-                    match s {
-                        _ if s < 20 => ' ',
-                        _ if s < 100 => '.',
-                        _ if s < 400 => '-',
-                        _ if s < 700 => '+',
-                        _ if s < 1500 => '*',
-                        _ => '#',
-                    }
-                );
+        {
+            const HEIGHT: i128 = 40;
+            const WIDTH: i128 = 100;
+            for i in 0..HEIGHT {
+                for j in 0..WIDTH {
+                    let x = i * 200 / HEIGHT;
+                    let y = j * 200 / WIDTH;
+                    let s = self.strength((x, y));
+                    eprint!(
+                        "{}",
+                        match s {
+                            _ if s < 20 => ' ',
+                            _ if s < 100 => '.',
+                            _ if s < 400 => '-',
+                            _ if s < 700 => '+',
+                            _ if s < 1500 => '*',
+                            _ => '#',
+                        }
+                    );
+                }
+                eprintln!();
             }
-            eprintln!();
         }
     }
 }
