@@ -392,12 +392,12 @@ fn main() {
                 }
             }
             for p in path {
-                let estimated_power = map.strength(p) - game.damage[p];
                 println!(
                     "# estimate_strength={}, damaged={}",
                     map.strength(p),
                     game.damage[p]
                 );
+                // let estimated_power = map.strength(p) - game.damage[p];
                 // if estimated_power > 0 {
                 //     game.dig(p, estimated_power + 10);
                 // }
