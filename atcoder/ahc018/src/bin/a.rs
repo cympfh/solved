@@ -79,7 +79,11 @@ impl Game {
             return;
         }
         println!("# Digging full({:?})", &p);
-        let powers = vec![100, 500, 1000, 5000];
+        // let powers = vec![100, 500, 1000, 5000];
+        // let powers = vec![100, 100, 200, 500, 1000, 1100, 2000];
+        let powers = vec![
+            100, 100, 200, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500,
+        ];
         for power in powers {
             self.dig(p, power);
         }
@@ -217,7 +221,7 @@ impl Map {
         let width = game.n / N;
         let coreradius = width / 2;
         let radius = width * 2 / 3;
-        let pows = vec![20, 50, 100, 500];
+        let pows = vec![50, 100, 500];
         for i in 0..=N {
             for j in 0..=N {
                 let x = width * i;
@@ -225,7 +229,7 @@ impl Map {
                 if x >= game.n || y >= game.n {
                     continue;
                 }
-                if !rects.iter().any(|r| r.contains((x, y), radius)) {
+                if !rects.iter().any(|r| r.contains((x, y), width)) {
                     continue;
                 }
                 println!("# Scan {:?}", (x, y));
@@ -389,14 +393,14 @@ fn main() {
             }
             for p in path {
                 let estimated_power = map.strength(p) - game.damage[p];
-                if estimated_power > 0 {
-                    println!(
-                        "# estimate_strength={}, damaged={}",
-                        map.strength(p),
-                        game.damage[p]
-                    );
-                    game.dig(p, estimated_power + 10);
-                }
+                println!(
+                    "# estimate_strength={}, damaged={}",
+                    map.strength(p),
+                    game.damage[p]
+                );
+                // if estimated_power > 0 {
+                //     game.dig(p, estimated_power + 10);
+                // }
                 game.dig_full(p);
             }
             trace!(#waterflow);
