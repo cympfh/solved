@@ -129,8 +129,7 @@ impl Map {
             }
         }
         let width = game.n / Map::N;
-        let pows = vec![50, 100, 500];
-        // let pows = vec![50, 50, 100, 100, 100, 200, 200];
+        let pows = vec![50, 50, 100, 100, 100, 200, 200];
         for i in 0..=Map::N {
             for j in 0..=Map::N {
                 let x = width * i;
