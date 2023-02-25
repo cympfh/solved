@@ -4,6 +4,7 @@
 use std::ops::Range;
 use std::process::exit;
 use std::{cmp::*, collections::*};
+use Hyper::*;
 
 // 水源, W <= 4
 // 家, K <= 10
@@ -351,18 +352,21 @@ fn main() {
             trace!(#Astar, home);
             let mut q = BinaryHeap::new();
             let mut checked = BTreeSet::new();
+            let mut memo = DefaultDict::new(Inf);
             for &w in game.waters.iter() {
                 let h = dist::manhattan(w, home);
                 q.push((Reverse((h, 0)), w));
+                memo[w] = Real(0);
             }
             let mut from = BTreeMap::new();
             while let Some((Reverse((_, cost)), u)) = q.pop() {
                 if checked.contains(&u) {
                     continue;
                 }
-                if u == home {
-                    break;
+                if memo[u] != Real(cost) {
+                    continue;
                 }
+                // if u == home { break; }
                 checked.insert(u);
                 for v in game.neigh(u) {
                     if game.waters.contains(&v) {
@@ -376,9 +380,12 @@ fn main() {
                     } else {
                         game.c + map.strength(v) - game.damage[v]
                     };
-                    from.insert(v, u);
-                    let h = dist::manhattan(v, home);
-                    q.push((Reverse((h + cost + appendcost, cost + appendcost)), v));
+                    if memo[v] > Real(cost + appendcost) {
+                        memo[v] = Real(cost + appendcost);
+                        from.insert(v, u);
+                        let h = dist::manhattan(v, home);
+                        q.push((Reverse((h + cost + appendcost, cost + appendcost)), v));
+                    }
                 }
             }
             let mut path = vec![home];
