@@ -129,7 +129,7 @@ impl Map {
             }
         }
         let width = game.n / Map::N;
-        let pows = vec![50, 100, 500];
+        let pows = vec![50, 50, 100, 100, 100, 200, 200];
         // let pows = vec![30, 50, 100, 500];
         for i in 0..=Map::N {
             for j in 0..=Map::N {
@@ -163,8 +163,10 @@ impl Map {
         let width = self.n / Map::N;
         let mut ev = vec![];
         for &(q, strength) in self.samples.iter() {
-            let d = dist::l2(p, q) as f64;
-            let band: f64 = (width as f64).powf(2.0) * 0.05;
+            // let d = dist::l2(p, q) as f64;
+            // let band: f64 = (width as f64).powf(2.0) * 0.05;
+            let d = dist::manhattan(p, q) as f64;
+            let band: f64 = (width as f64) * 0.5;
             let z = (-d / band).exp();
             if z < 1e-5 {
                 continue;

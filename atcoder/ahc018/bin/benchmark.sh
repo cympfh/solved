@@ -5,9 +5,10 @@ BIN=./target/release/a
 
 cargo build --release --bin a
 touch result.log
+cp /dev/null /tmp/result.log
 
 info() {
-  cat | tee -a result.log
+  cat | tee -a /tmp/result.log | tee -a result.log
 }
 
 echo | info
@@ -21,3 +22,8 @@ for i in $(seq 80 99); do
   $TESTER $BIN < "./tools/in/$p.txt" >/dev/null 2>/tmp/result
   cat /tmp/result | info
 done
+
+(
+  echo -n "Sum = "
+  cat /tmp/result.log | grep 'Total Cost' | awk '{print $NF}'
+) | tee -a result.log
