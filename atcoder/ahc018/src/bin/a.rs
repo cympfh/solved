@@ -87,7 +87,12 @@ impl Game {
     }
     /// 水を伝播させる
     fn waterflow(&mut self) {
-        let mut q: Vec<P> = self.waters.clone().into_iter().collect();
+        let mut q: Vec<P> = vec![];
+        for w in self.waters.iter() {
+            if self.broken.contains(w) {
+                q.push(*w);
+            }
+        }
         let mut appendwaters = BTreeSet::new();
         let mut checked = BTreeSet::new();
         while let Some(u) = q.pop() {
@@ -114,11 +119,16 @@ impl Game {
 struct Map {
     n: i128,
     samples: Vec<(P, i128)>,
+    strength_memo: BTreeMap<P, i128>,
 }
 impl Map {
     const N: i128 = 14; // サンプル数
     fn new(n: i128) -> Self {
-        Self { n, samples: vec![] }
+        Self {
+            n,
+            samples: vec![],
+            strength_memo: BTreeMap::new(),
+        }
     }
     /// サンプリングして地盤の硬さを調べる
     fn scan(&mut self, game: &mut Game) {
@@ -158,7 +168,10 @@ impl Map {
         }
     }
     /// 硬さの推定値, KDE
-    fn strength(&self, p: P) -> i128 {
+    fn strength(&mut self, p: P) -> i128 {
+        if let Some(&s) = self.strength_memo.get(&p) {
+            return s;
+        }
         let width = self.n / Map::N;
         let mut ev = vec![];
         for &(q, strength) in self.samples.iter() {
@@ -179,10 +192,12 @@ impl Map {
             let s: f64 = ev.iter().map(|(s, z)| s * z).sum::<f64>();
             s / z
         };
-        s as i128
+        let s = s as i128;
+        self.strength_memo.insert(p, s);
+        s
     }
     /// 残りの硬さ
-    fn rest_strength(&self, game: &Game, p: P) -> i128 {
+    fn rest_strength(&mut self, game: &Game, p: P) -> i128 {
         let s = self.strength(p);
         let d = game.damage[p];
         if game.broken.contains(&p) {
@@ -194,7 +209,7 @@ impl Map {
         }
     }
     /// 推定されたマップの可視化
-    fn dump(&self) {
+    fn dump(&mut self) {
         #[cfg(debug_assertions)]
         {
             const HEIGHT: i128 = 40;
@@ -258,15 +273,6 @@ fn main() {
     // 全ての家のセルを先に破壊する
     {
         for p in game.homes.clone() {
-            println!("# Dig-full home({:?})", &p);
-            game.dig_full(p);
-        }
-    }
-
-    // 全ての水源を掘る
-    // TODO(BUG? このブロックを削除したいが, 消すと WA になる)
-    {
-        for p in game.waters.clone() {
             println!("# Dig-full home({:?})", &p);
             game.dig_full(p);
         }
