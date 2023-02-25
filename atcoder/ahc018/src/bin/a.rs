@@ -81,11 +81,14 @@ impl Game {
         println!("# Digging full({:?})", &p);
         // let powers = vec![100, 500, 1000, 5000];
         // let powers = vec![100, 100, 200, 500, 1000, 1100, 2000];
-        let powers = vec![
-            100, 100, 200, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500,
-        ];
-        for power in powers {
-            self.dig(p, power);
+        // let powers = vec![
+        //     50, 50, 100, 200, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500,
+        // ];
+        // for power in powers {
+        //     self.dig(p, power);
+        // }
+        for _ in 0..100 {
+            self.dig(p, 50);
         }
     }
     /// 矩形区間を同じパワーで全部掘る
@@ -312,14 +315,6 @@ fn main() {
     // 全ての家のセルを先に破壊する
     {
         for p in game.homes.clone() {
-            println!("# Dig-full home({:?})", &p);
-            game.dig_full(p);
-        }
-    }
-
-    // 全ての水源を掘る
-    {
-        for p in game.waters.clone() {
             println!("# Dig-full home({:?})", &p);
             game.dig_full(p);
         }
