@@ -349,7 +349,7 @@ fn main() {
         nearest.sort_by_key(|&(_, _, d)| d);
 
         for &(home, _w, _d) in nearest.iter() {
-            trace!(home);
+            trace!(#Astar, home);
             let mut q = BinaryHeap::new();
             let mut checked = BTreeSet::new();
             for &w in game.waters.iter() {
@@ -357,7 +357,6 @@ fn main() {
                 q.push((Reverse((h, 0)), w));
             }
             let mut from = BTreeMap::new();
-            trace!(#Astar);
             while let Some((Reverse((_, cost)), u)) = q.pop() {
                 if checked.contains(&u) {
                     continue;
@@ -383,7 +382,6 @@ fn main() {
                     q.push((Reverse((h + cost + appendcost, cost + appendcost)), v));
                 }
             }
-            trace!(#done);
             let mut path = vec![home];
             while let Some(&prev) = from.get(&path[path.len() - 1]) {
                 path.push(prev);
@@ -865,6 +863,13 @@ macro_rules! trace {
     (# $x:ident) => {
         #[cfg(debug_assertions)]
         eprintln!("[{}]", stringify!($x));
+    };
+    (# $label:ident, $($xs:expr),*) => {
+        #[cfg(debug_assertions)]
+        {
+            eprint!("[{}] ", stringify!($label));
+            trace!(($($xs),*));
+        }
     };
     ($x:expr) => {
         #[cfg(debug_assertions)]
