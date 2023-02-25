@@ -334,3 +334,53 @@ Problem = 0096	Total Cost = 101252
 Problem = 0097	Total Cost = 143380
 Problem = 0098	Total Cost = 187128
 Problem = 0099	Total Cost = 91790
+
+Sat 25 Feb 2023 07:40:01 PM JST
+0a29481dabf4f95ea9a7a18dec474710d7c4b237
+:art: リファクタリング
+Problem = 0080	Total Cost = 126288
+Problem = 0081	Total Cost = 119718
+Problem = 0082	Total Cost = 164504
+Problem = 0083	Total Cost = 142790
+Problem = 0084	Total Cost = 173754
+Problem = 0085	Total Cost = 110166
+Problem = 0086	Total Cost = 93140
+Problem = 0087	Total Cost = 367558
+Problem = 0088	Total Cost = 425426
+Problem = 0089	Total Cost = 86374
+Problem = 0090	Total Cost = 186220
+Problem = 0091	Total Cost = 137826
+Problem = 0092	Total Cost = 122026
+Problem = 0093	Total Cost = 197808
+Problem = 0094	Total Cost = 79532
+Problem = 0095	Total Cost = 163428
+Problem = 0096	Total Cost = 101252
+Problem = 0097	Total Cost = 143380
+Problem = 0098	Total Cost = 187128
+Problem = 0099	Total Cost = 91790
+
+Sat 25 Feb 2023 08:47:21 PM JST
+0a29481dabf4f95ea9a7a18dec474710d7c4b237
+BUG: 最初に水源を全て掘るブロックを消したいが消すと WA になるので残してる
+https://atcoder.jp/contests/ahc018/submissions/39178568
+9503892
+Problem = 0080	Total Cost = 122998
+Problem = 0081	Total Cost = 121188
+Problem = 0082	Total Cost = 163688
+Problem = 0083	Total Cost = 140348
+Problem = 0084	Total Cost = 172592
+Problem = 0085	Total Cost = 107216
+Problem = 0086	Total Cost = 91760
+Problem = 0087	Total Cost = 367994
+Problem = 0088	Total Cost = 472790
+Problem = 0089	Total Cost = 84900
+Problem = 0090	Total Cost = 184066
+Problem = 0091	Total Cost = 137560
+Problem = 0092	Total Cost = 119574
+Problem = 0093	Total Cost = 202484
+Problem = 0094	Total Cost = 77372
+Problem = 0095	Total Cost = 158796
+Problem = 0096	Total Cost = 98688
+Problem = 0097	Total Cost = 141690
+Problem = 0098	Total Cost = 186844
+Problem = 0099	Total Cost = 90246

@@ -80,49 +80,9 @@ impl Game {
             return;
         }
         println!("# Digging full({:?})", &p);
-        // let powers = vec![100, 500, 1000, 5000];
-        // let powers = vec![100, 100, 200, 500, 1000, 1100, 2000];
-        // let powers = vec![
-        //     50, 50, 100, 200, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500,
-        // ];
-        // for power in powers {
-        //     self.dig(p, power);
-        // }
-        for _ in 0..100 {
-            self.dig(p, 50);
-        }
-    }
-    /// 矩形区間を同じパワーで全部掘る
-    /// x_range, y_range を辺に持つ矩形を選ぶ
-    fn dig_range(&mut self, x_range: Range<i128>, y_range: Range<i128>, power: i128) {
-        println!("# Digging range({:?}, {:?})", &x_range, &y_range);
-        for x in x_range {
-            for y in y_range.clone() {
-                self.dig((x, y), power);
-            }
-        }
-    }
-    /// 線分上を掘る
-    /// 厚みを持たせてやや周りも掘る
-    fn dig_line(&mut self, s: P, t: P, width: f64, power: i128) {
-        println!("# Digging line({:?} => {:?})", s, t);
-        fn to(a: i128, b: i128) -> Vec<i128> {
-            if a <= b {
-                (a..=b).collect()
-            } else {
-                (b..=a).rev().collect()
-            }
-        }
-        for x in to(s.0, t.0) {
-            for y in to(s.1, t.1) {
-                let k = ((t.1 - s.1) * x - (t.0 - s.0) * y - (t.1 - s.1) * s.0 + (t.0 - s.0) * s.1)
-                    .abs() as f64;
-                let den = (((t.0 - s.0).pow(2) + (t.1 - s.1).pow(2)) as f64).sqrt();
-                let d = k / den;
-                if d <= width {
-                    self.dig((x, y), power);
-                }
-            }
+        let mut res = Dig::Rest;
+        while res != Dig::Broken {
+            res = self.dig(p, 40);
         }
     }
     /// 水を伝播させる
@@ -316,6 +276,15 @@ fn main() {
     // 全ての家のセルを先に破壊する
     {
         for p in game.homes.clone() {
+            println!("# Dig-full home({:?})", &p);
+            game.dig_full(p);
+        }
+    }
+
+    // 全ての水源を掘る
+    // TODO(BUG? このブロックを削除したいが, 消すと WA になる)
+    {
+        for p in game.waters.clone() {
             println!("# Dig-full home({:?})", &p);
             game.dig_full(p);
         }
