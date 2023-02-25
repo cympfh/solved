@@ -25,5 +25,5 @@ done
 
 (
   echo -n "Sum = "
-  cat /tmp/result.log | grep 'Total Cost' | awk '{print $NF}'
+  cat /tmp/result.log | grep 'Total Cost' | awk '{print $NF}' | jq -s add
 ) | tee -a result.log
