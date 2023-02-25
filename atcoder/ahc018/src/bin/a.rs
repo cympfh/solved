@@ -164,49 +164,18 @@ impl Map {
     }
     /// 硬さの推定値
     fn strength(&self, p: P) -> i128 {
-        let mut r = vec![];
-        let radius = 2;
-        for dx in -radius..=radius {
-            for dy in -radius..=radius {
-                let l2 = dx * dx + dy * dy;
-                let x = p.0 + dx;
-                let y = p.1 + dy;
-                if x < 0 || y < 0 || x >= self.n || y >= self.n {
-                    continue;
-                }
-                if l2 <= 4 {
-                    if let Some(&s) = self.data.get(&(x, y)) {
-                        r.push(s);
-                    }
-                }
-            }
-        }
-        if r.is_empty() {
+        *self.data.get(&p).unwrap_or(&4000)
+    }
+    /// 残りの硬さ
+    fn rest_strength(&self, game: &Game, p: P) -> i128 {
+        let s = *self.data.get(&p).unwrap_or(&4000);
+        let d = game.damage[p];
+        if game.broken.contains(&p) {
+            0
+        } else if d >= s {
             0
         } else {
-            r.iter().sum::<i128>() / r.len() as i128
-        }
-    }
-    /// p 周辺は strength であると推定する
-    /// coreraidus 以下は strength を代入
-    /// radius 以下は strength と現在推定値の平均を取る
-    fn set(&mut self, p: P, strength: i128, coreradius: i128, radius: i128) {
-        for dx in -radius..=radius {
-            for dy in -radius..=radius {
-                let l2 = dx * dx + dy * dy;
-                let x = p.0 + dx;
-                let y = p.1 + dy;
-                if x < 0 || y < 0 || x >= self.n || y >= self.n {
-                    continue;
-                }
-                if l2 < coreradius.pow(2) {
-                    self.data.insert((x, y), strength);
-                } else if l2 < radius.pow(2) {
-                    let s = self.data.get(&(x, y)).unwrap();
-                    let s = (s + strength) / 2;
-                    self.data.insert((x, y), s);
-                }
-            }
+            s - d
         }
     }
     /// サンプリングして地盤の硬さを調べる
@@ -219,9 +188,9 @@ impl Map {
         }
         const N: i128 = 14; // サンプル数
         let width = game.n / N;
-        let coreradius = width / 2;
-        let radius = width * 2 / 3;
         let pows = vec![50, 100, 500];
+        // let pows = vec![30, 50, 100, 500];
+        let mut samples: Vec<(P, i128)> = vec![];
         for i in 0..=N {
             for j in 0..=N {
                 let x = width * i;
@@ -238,12 +207,43 @@ impl Map {
                     accumulate += power;
                     let res = game.dig((x, y), power);
                     if res == Dig::Broken {
-                        self.set((x, y), accumulate, coreradius, radius);
                         break;
                     } else if power == pows[pows.len() - 1] {
-                        self.set((x, y), 4800, coreradius, radius);
+                        accumulate = 4000;
+                        break;
                     }
                 }
+                println!("# Sample: sturdiness of {:?} is {}", (x, y), accumulate);
+                samples.push(((x, y), accumulate));
+            }
+        }
+        trace!(&samples);
+        // KDE
+        for x in 0..game.n {
+            for y in 0..game.n {
+                let p = (x, y);
+                let mut ev = vec![];
+                for &(q, strength) in samples.iter() {
+                    let d = dist::l2(p, q) as f64;
+                    let band: f64 = (width as f64).powf(2.0) * 0.05;
+                    let z = (-d / band).exp();
+                    if z < 1e-5 {
+                        continue;
+                    }
+                    ev.push((strength as f64, z));
+                }
+                let s: f64 = if ev.is_empty() {
+                    4000.0
+                } else {
+                    let z: f64 = ev.iter().map(|(_, z)| z).sum();
+                    let s: f64 = ev.iter().map(|(s, z)| s * z).sum::<f64>();
+                    s / z
+                };
+                if p == (55, 56) || p == (56, 56) {
+                    trace!(&p, s);
+                    trace!(&ev);
+                }
+                self.data.insert(p, s as i128);
             }
         }
     }
@@ -262,10 +262,14 @@ impl Map {
                         "{}",
                         match s {
                             _ if s < 20 => ' ',
-                            _ if s < 100 => '.',
-                            _ if s < 400 => '-',
-                            _ if s < 700 => '+',
-                            _ if s < 1500 => '*',
+                            _ if s < 50 => '1',
+                            _ if s < 100 => '2',
+                            _ if s < 200 => '3',
+                            _ if s < 500 => '4',
+                            _ if s < 700 => '5',
+                            _ if s < 1000 => '6',
+                            _ if s < 1500 => '7',
+                            _ if s < 2500 => '8',
                             _ => '#',
                         }
                     );
@@ -390,15 +394,15 @@ fn main() {
                 }
             }
             for p in path {
+                let rest = map.rest_strength(&game, p);
                 println!(
-                    "# estimate_strength={}, damaged={}",
+                    "# {:?}; estimate_strength={}, damaged={}; rest={}",
+                    p,
                     map.strength(p),
-                    game.damage[p]
+                    game.damage[p],
+                    rest,
                 );
-                // let estimated_power = map.strength(p) - game.damage[p];
-                // if estimated_power > 0 {
-                //     game.dig(p, estimated_power + 10);
-                // }
+                // if rest > 0 { game.dig(p, rest); }
                 game.dig_full(p);
             }
             trace!(#waterflow);
