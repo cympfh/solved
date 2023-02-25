@@ -113,34 +113,12 @@ impl Game {
 #[derive(Debug, Clone)]
 struct Map {
     n: i128,
-    data: BTreeMap<P, i128>,
+    samples: Vec<(P, i128)>,
 }
 impl Map {
+    const N: i128 = 14; // サンプル数
     fn new(n: i128) -> Self {
-        let mut data = BTreeMap::new();
-        let avg = 700;
-        for i in 0..n {
-            for j in 0..n {
-                data.insert((i, j), avg);
-            }
-        }
-        Self { n, data }
-    }
-    /// 硬さの推定値
-    fn strength(&self, p: P) -> i128 {
-        *self.data.get(&p).unwrap_or(&4000)
-    }
-    /// 残りの硬さ
-    fn rest_strength(&self, game: &Game, p: P) -> i128 {
-        let s = *self.data.get(&p).unwrap_or(&4000);
-        let d = game.damage[p];
-        if game.broken.contains(&p) {
-            0
-        } else if d >= s {
-            0
-        } else {
-            s - d
-        }
+        Self { n, samples: vec![] }
     }
     /// サンプリングして地盤の硬さを調べる
     fn scan(&mut self, game: &mut Game) {
@@ -150,13 +128,11 @@ impl Map {
                 rects.push(Rect(h, w));
             }
         }
-        const N: i128 = 14; // サンプル数
-        let width = game.n / N;
+        let width = game.n / Map::N;
         let pows = vec![50, 100, 500];
         // let pows = vec![30, 50, 100, 500];
-        let mut samples: Vec<(P, i128)> = vec![];
-        for i in 0..=N {
-            for j in 0..=N {
+        for i in 0..=Map::N {
+            for j in 0..=Map::N {
                 let x = width * i;
                 let y = width * j;
                 if x >= game.n || y >= game.n {
@@ -178,37 +154,42 @@ impl Map {
                     }
                 }
                 println!("# Sample: sturdiness of {:?} is {}", (x, y), accumulate);
-                samples.push(((x, y), accumulate));
+                self.samples.push(((x, y), accumulate));
             }
         }
-        trace!(&samples);
-        // KDE
-        for x in 0..game.n {
-            for y in 0..game.n {
-                let p = (x, y);
-                let mut ev = vec![];
-                for &(q, strength) in samples.iter() {
-                    let d = dist::l2(p, q) as f64;
-                    let band: f64 = (width as f64).powf(2.0) * 0.05;
-                    let z = (-d / band).exp();
-                    if z < 1e-5 {
-                        continue;
-                    }
-                    ev.push((strength as f64, z));
-                }
-                let s: f64 = if ev.is_empty() {
-                    4000.0
-                } else {
-                    let z: f64 = ev.iter().map(|(_, z)| z).sum();
-                    let s: f64 = ev.iter().map(|(s, z)| s * z).sum::<f64>();
-                    s / z
-                };
-                if p == (55, 56) || p == (56, 56) {
-                    trace!(&p, s);
-                    trace!(&ev);
-                }
-                self.data.insert(p, s as i128);
+    }
+    /// 硬さの推定値, KDE
+    fn strength(&self, p: P) -> i128 {
+        let width = self.n / Map::N;
+        let mut ev = vec![];
+        for &(q, strength) in self.samples.iter() {
+            let d = dist::l2(p, q) as f64;
+            let band: f64 = (width as f64).powf(2.0) * 0.05;
+            let z = (-d / band).exp();
+            if z < 1e-5 {
+                continue;
             }
+            ev.push((strength as f64, z));
+        }
+        let s: f64 = if ev.is_empty() {
+            4000.0
+        } else {
+            let z: f64 = ev.iter().map(|(_, z)| z).sum();
+            let s: f64 = ev.iter().map(|(s, z)| s * z).sum::<f64>();
+            s / z
+        };
+        s as i128
+    }
+    /// 残りの硬さ
+    fn rest_strength(&self, game: &Game, p: P) -> i128 {
+        let s = self.strength(p);
+        let d = game.damage[p];
+        if game.broken.contains(&p) {
+            0
+        } else if d >= s {
+            0
+        } else {
+            s - d
         }
     }
     /// 推定されたマップの可視化
