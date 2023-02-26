@@ -1,0 +1,29 @@
+                println!("# Scan {:?}", (x, y));
+                let mut accumulate = 0;
+                let mut estimate = 4000;
+                for &power in pows.iter() {
+                    accumulate += power;
+                    let res = game.dig((x, y), power);
+                    if res == Dig::Broken {
+                        estimate = accumulate;
+                        break;
+                    }
+                    estimate = accumulate + 200;
+                }
+
+
+
+                println!("# Scan {:?}", (x, y));
+                let mut accumulate = 0;
+                for &power in pows.iter() {
+                    accumulate += power;
+                    let res = game.dig((x, y), power);
+                    if res == Dig::Broken {
+                        break;
+                    } else if power == pows[pows.len() - 1] {
+                        accumulate = 4000;
+                        break;
+                    }
+                }
+                println!("# Sample: sturdiness of {:?} is {}", (x, y), accumulate);
+                self.samples.push(((x, y), accumulate));
