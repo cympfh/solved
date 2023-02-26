@@ -1,11 +1,29 @@
-        const N: i128 = 20; // サンプル数
-        let coreradius = 100 / N / 2;
-        let radius = 200 / N;
-        // let pows = vec![50, 100, 500, 1000];
-        // let pows = vec![50, 100, 200, 500];
-        let pows = vec![50, 100, 200, 500, 1000, 2000, 4000];
+                println!("# Scan {:?}", (x, y));
+                let mut accumulate = 0;
+                let mut estimate = 4000;
+                for &power in pows.iter() {
+                    accumulate += power;
+                    let res = game.dig((x, y), power);
+                    if res == Dig::Broken {
+                        estimate = accumulate;
+                        break;
+                    }
+                    estimate = accumulate + 200;
+                }
 
 
-もう少し賢い推定マップが必要そう
-今はかなりカンでやってしまってる
-カーネル密度推定とかそんなん?
+
+                println!("# Scan {:?}", (x, y));
+                let mut accumulate = 0;
+                for &power in pows.iter() {
+                    accumulate += power;
+                    let res = game.dig((x, y), power);
+                    if res == Dig::Broken {
+                        break;
+                    } else if power == pows[pows.len() - 1] {
+                        accumulate = 4000;
+                        break;
+                    }
+                }
+                println!("# Sample: sturdiness of {:?} is {}", (x, y), accumulate);
+                self.samples.push(((x, y), accumulate));

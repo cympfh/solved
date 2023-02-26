@@ -460,3 +460,53 @@ Problem = 0097	Total Cost = 153412
 Problem = 0098	Total Cost = 166122
 Problem = 0099	Total Cost = 79998
 Sum = 3001756
+
+Sun 26 Feb 2023 05:44:15 PM JST
+d2d82cc99ee2558fb90e64a7d0799ef171279a83
+Manhattan2-Gaussian-Kernel
+Problem = 0080	Total Cost = 109130
+Problem = 0081	Total Cost = 115940
+Problem = 0082	Total Cost = 153686
+Problem = 0083	Total Cost = 128020
+Problem = 0084	Total Cost = 151002
+Problem = 0085	Total Cost = 101660
+Problem = 0086	Total Cost = 89646
+Problem = 0087	Total Cost = 276450
+Problem = 0088	Total Cost = 487810
+Problem = 0089	Total Cost = 71338
+Problem = 0090	Total Cost = 171358
+Problem = 0091	Total Cost = 121816
+Problem = 0092	Total Cost = 109464
+Problem = 0093	Total Cost = 206506
+Problem = 0094	Total Cost = 71012
+Problem = 0095	Total Cost = 151602
+Problem = 0096	Total Cost = 86124
+Problem = 0097	Total Cost = 145564
+Problem = 0098	Total Cost = 165898
+Problem = 0099	Total Cost = 80082
+Sum = 2994108
+
+Sun 26 Feb 2023 05:54:22 PM JST
+d2d82cc99ee2558fb90e64a7d0799ef171279a83
+scan で掘りすぎない & 掘れなかったら 2000 と推定する
+Problem = 0080	Total Cost = 93146
+Problem = 0081	Total Cost = 88804
+Problem = 0082	Total Cost = 187862
+Problem = 0083	Total Cost = 109780
+Problem = 0084	Total Cost = 126122
+Problem = 0085	Total Cost = 79132
+Problem = 0086	Total Cost = 76102
+Problem = 0087	Total Cost = 227906
+Problem = 0088	Total Cost = 468994
+Problem = 0089	Total Cost = 59016
+Problem = 0090	Total Cost = 157184
+Problem = 0091	Total Cost = 109240
+Problem = 0092	Total Cost = 94424
+Problem = 0093	Total Cost = 178314
+Problem = 0094	Total Cost = 62692
+Problem = 0095	Total Cost = 137312
+Problem = 0096	Total Cost = 74964
+Problem = 0097	Total Cost = 132892
+Problem = 0098	Total Cost = 145778
+Problem = 0099	Total Cost = 69174
+Sum = 2678838

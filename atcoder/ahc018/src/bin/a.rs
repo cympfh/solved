@@ -139,7 +139,7 @@ impl Map {
             }
         }
         let width = game.n / Map::N;
-        let pows = vec![50, 50, 100, 100, 100, 200, 200];
+        let pows = vec![50, 50, 100, 100, 100];
         for i in 0..=Map::N {
             for j in 0..=Map::N {
                 let x = width * i;
@@ -152,18 +152,18 @@ impl Map {
                 }
                 println!("# Scan {:?}", (x, y));
                 let mut accumulate = 0;
+                let mut estimate = 2000;
                 for &power in pows.iter() {
                     accumulate += power;
                     let res = game.dig((x, y), power);
                     if res == Dig::Broken {
-                        break;
-                    } else if power == pows[pows.len() - 1] {
-                        accumulate = 4000;
+                        estimate = accumulate;
                         break;
                     }
+                    // estimate = accumulate + 500;
                 }
-                println!("# Sample: sturdiness of {:?} is {}", (x, y), accumulate);
-                self.samples.push(((x, y), accumulate));
+                println!("# Sample: sturdiness of {:?} is {}", (x, y), estimate);
+                self.samples.push(((x, y), estimate));
             }
         }
     }
@@ -175,10 +175,10 @@ impl Map {
         let width = self.n / Map::N;
         let mut ev = vec![];
         for &(q, strength) in self.samples.iter() {
-            // let d = dist::l2(p, q) as f64;
-            // let band: f64 = (width as f64).powf(2.0) * 0.05;
-            let d = dist::manhattan(p, q) as f64;
-            let band: f64 = (width as f64) * 0.1;
+            // let d = dist::manhattan(p, q) as f64;
+            // let band: f64 = (width as f64) * 0.1;
+            let d = (dist::manhattan(p, q) as f64).powf(2.0);
+            let band: f64 = (width as f64).powf(2.0) * 0.1;
             let z = (-d / band).exp();
             if z < 1e-5 {
                 continue;
