@@ -1,0 +1,136 @@
+#![allow(unused_imports, unused_macros, dead_code)]
+use std::{cmp::*, collections::*};
+
+fn main() {
+    let mut sc = Scanner::default();
+
+    let mut not_called = BinaryHeap::new();
+    let mut called = BinaryHeap::new();
+    let mut processed = BTreeSet::new();
+
+    let n: usize = sc.cin();
+    for i in 0..n {
+        not_called.push(Reverse(i));
+    }
+
+    let q: usize = sc.cin();
+    for _ in 0..q {
+        let ty: usize = sc.cin();
+        match ty {
+            1 => {
+                if let Some(Reverse(i)) = not_called.pop() {
+                    trace!(#CalledFirst, i);
+                    called.push(Reverse(i));
+                }
+            }
+            2 => {
+                let x = sc.usize1();
+                trace!(#Process, x);
+                processed.insert(x);
+            }
+            3 => {
+                while let Some(Reverse(i)) = called.pop() {
+                    if processed.contains(&i) {
+                        trace!(#Skip, i);
+                        continue;
+                    }
+                    trace!(#CalledAgain, i);
+                    put!(i + 1);
+                    called.push(Reverse(i));
+                    break;
+                }
+            }
+            _ => panic!(),
+        }
+    }
+}
+
+// {{{
+use std::io::{self, Write};
+use std::str::FromStr;
+#[derive(Default)]
+pub struct Scanner {
+    buffer: VecDeque<String>,
+}
+impl Scanner {
+    pub fn cin<T: FromStr>(&mut self) -> T {
+        while self.buffer.is_empty() {
+            let mut line = String::new();
+            let _ = io::stdin().read_line(&mut line);
+            self.buffer = line.split_whitespace().map(|w| String::from(w)).collect();
+        }
+        self.buffer.pop_front().unwrap().parse::<T>().ok().unwrap()
+    }
+    pub fn usize1(&mut self) -> usize {
+        self.cin::<usize>() - 1
+    }
+    pub fn chars(&mut self) -> Vec<char> {
+        self.cin::<String>().chars().collect()
+    }
+    pub fn vec<T: FromStr>(&mut self, n: usize) -> Vec<T> {
+        (0..n).map(|_| self.cin()).collect()
+    }
+    pub fn pair<S: FromStr, T: FromStr>(&mut self) -> (S, T) {
+        (self.cin::<S>(), self.cin::<T>())
+    }
+}
+fn flush() {
+    io::stdout().flush().unwrap();
+}
+#[macro_export]
+macro_rules! min {
+    (.. $x:expr) => {{
+        let mut it = $x.iter();
+        it.next().map(|z| it.fold(z, |x, y| min!(x, y)))
+    }};
+    ($x:expr) => ($x);
+    ($x:expr, $($ys:expr),*) => {{
+        let t = min!($($ys),*);
+        if $x < t { $x } else { t }
+    }}
+}
+#[macro_export]
+macro_rules! max {
+    (.. $x:expr) => {{
+        let mut it = $x.iter();
+        it.next().map(|z| it.fold(z, |x, y| max!(x, y)))
+    }};
+    ($x:expr) => ($x);
+    ($x:expr, $($ys:expr),*) => {{
+        let t = max!($($ys),*);
+        if $x > t { $x } else { t }
+    }}
+}
+#[macro_export]
+macro_rules! trace {
+    (# $a:ident $(, $xs:expr),* $(,)? ) => {
+        #[cfg(debug_assertions)]
+        eprintln!("[{}] {} = {:?}", stringify!($a), stringify!($($xs),*), ($($xs),*))
+    };
+    ($($xs:expr),*) => { trace!(($($xs),*)) };
+    ($x:expr) => {
+        #[cfg(debug_assertions)]
+        eprintln!(">>> {} = {:?}", stringify!($x), $x)
+    };
+}
+#[macro_export]
+macro_rules! put {
+    (# $a:ident) => {println!("{}", stringify!($a))};
+    (.. $x:expr) => {{
+        let mut it = $x.iter();
+        if let Some(x) = it.next() { print!("{}", x); }
+        for x in it { print!(" {}", x); }
+        println!("");
+    }};
+    ($x:expr) => { println!("{}", $x) };
+    ($x:expr, $($xs:expr),*) => { print!("{} ", $x); put!($($xs),*) }
+}
+#[macro_export]
+macro_rules! ndarray {
+    ($x:expr;) => { $x };
+    ($x:expr; $size:expr $( , $rest:expr )*) => {
+        vec![ndarray!($x; $($rest),*); $size]
+    };
+}
+
+// }}}
