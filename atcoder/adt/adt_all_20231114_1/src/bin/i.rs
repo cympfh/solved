@@ -7,7 +7,7 @@ fn main() {
     let m: usize = sc.cin();
     let k: usize = sc.cin();
 
-    let bin1: Vec<(i64, i64)> = (0..n).map(|_| (sc.cin(), sc.cin())).collect();
+    let mut bin1: Vec<(i64, i64)> = (0..n).map(|_| (sc.cin(), sc.cin())).collect();
     let bin2: Vec<(i64, i64)> = (0..m).map(|_| (sc.cin(), sc.cin())).collect();
 
     let mut left = 0.0; // コレ以上が K 個以上ある

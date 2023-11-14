@@ -4,6 +4,41 @@ use std::{cmp::*, collections::*};
 fn main() {
     let mut sc = Scanner::default();
     let n: usize = sc.cin();
+    let xs: Vec<usize> = sc.vec(n);
+
+    let mut memo = vec![0_usize; 210_000];
+    let mut set = BTreeMap::new();
+    for i in 0..n {
+        let x = xs[i];
+        memo[x] += 1;
+        set.insert((x, i + 1), memo[x]);
+    }
+    trace!(&set);
+
+    fn count(set: &BTreeMap<(usize, usize), usize>, idx: usize, x: usize) -> usize {
+        if let Some((&(y, _), &c)) = set.range(..(x, idx)).next_back() {
+            if x == y {
+                c
+            } else {
+                0
+            }
+        } else {
+            0
+        }
+    }
+
+    let q: usize = sc.cin();
+    for _ in 0..q {
+        let left: usize = sc.cin();
+        let right: usize = sc.cin();
+        let x: usize = sc.cin();
+        trace!(
+            (left, right, x),
+            count(&set, left, x),
+            count(&set, right + 1, x)
+        );
+        put!(count(&set, right + 1, x) - count(&set, left, x));
+    }
 }
 
 // {{{
