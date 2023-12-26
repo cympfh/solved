@@ -41,37 +41,6 @@ impl Card {
     }
 }
 
-/// 相場
-#[derive(Debug, Clone)]
-struct Souba {
-    data: VecDeque<i64>,
-    size: usize,
-}
-impl Souba {
-    fn new(size: usize) -> Self {
-        Self {
-            data: VecDeque::new(),
-            size,
-        }
-    }
-    fn add(&mut self, x: i64) {
-        self.data.push_back(x);
-        while self.data.len() > self.size {
-            self.data.pop_front();
-        }
-    }
-    fn value(&self) -> i64 {
-        let mut sum = 0;
-        if self.data.is_empty() {
-            return 0;
-        }
-        for i in 0..self.data.len() {
-            sum += self.data[i];
-        }
-        sum / self.data.len() as i64
-    }
-}
-
 struct Game {
     hand: Vec<Card>,
     num_hand: usize, // N
@@ -81,8 +50,7 @@ struct Game {
     fulltime: usize,
     num_draw: usize, // K
     money: i64,
-    ell: usize,   // L, 増資カードの使用回数
-    souba: Souba, // 提示されるカードの相場
+    ell: usize, // L, 増資カードの使用回数
     rand: XorShift,
 }
 impl Game {
@@ -97,7 +65,6 @@ impl Game {
             num_draw,
             money: 0,
             ell: 0,
-            souba: Souba::new(30),
             rand: XorShift::new(),
         }
     }
@@ -110,7 +77,6 @@ impl Game {
         trace!(self.money);
         trace!(&self.projects);
         trace!(&self.hand);
-        trace!(self.souba.value());
 
         let used_index;
         // 使用カードの選択
@@ -122,32 +88,6 @@ impl Game {
                 _ => 0,
             };
             cands.push((0, i, j)); // priority, card-index, project-index
-                                   // for i in 0..self.hand.len() {
-                                   //     let c = &self.hand[i];
-                                   //     match c {
-                                   //         &Card::PowerUp if self.times < 500 && self.ell < 1 => {
-                                   //             cands.push((1000, i, 0));
-                                   //         }
-                                   //         &Card::WorkAll(w) => {
-                                   //             cands.push((300 - w, i, 0));
-                                   //         }
-                                   //         &Card::Work(w) => {
-                                   //             let mut maxvalue = 0;
-                                   //             let mut maxarg = (0..self.projects.len())
-                                   //                 .min_by_key(|&i| self.projects[i].cost)
-                                   //                 .unwrap();
-                                   //             for i in 0..self.projects.len() {
-                                   //                 let p = &self.projects[i];
-                                   //                 if p.cost <= w && p.value > maxvalue {
-                                   //                     maxvalue = p.value;
-                                   //                     maxarg = i;
-                                   //                 }
-                                   //             }
-                                   //             cands.push((10, i, maxarg));
-                                   //         }
-                                   //         _ => {}
-                                   //     }
-                                   // }
             let (_, c, p) = cands.pop().unwrap();
             trace!(#use &c, &self.hand[c], p);
             used_index = c;
@@ -170,35 +110,12 @@ impl Game {
         {
             let given_cards = self.get_next_hands();
             trace!(&given_cards);
-            let mut cands = BinaryHeap::new();
-            cands.push((0, 0)); // priority, card-index
-                                // for i in 0..given_cards.len() {
-                                //     if given_cards[i].1 > self.money {
-                                //         continue;
-                                //     }
-                                //     match given_cards[i].0 {
-                                //         Card::PowerUp if self.times < 500 && self.ell < 1 => {
-                                //             cands.push((100000, i));
-                                //         }
-                                //         Card::WorkAll(w) if self.times <= 940 => {
-                                //             cands.push((w + 100, i));
-                                //         }
-                                //         Card::Work(w) if self.times <= 900 => {
-                                //             cands.push((w + 10, i));
-                                //         }
-                                //         _ => {}
-                                //     }
-                                // }
-            let (_, c) = cands.pop().unwrap();
+            let c = 0;
             trace!(#get c, &given_cards[c]);
             println!("{}", c);
             flush();
             self.money -= given_cards[c].1;
             self.hand[used_index] = given_cards[c].0.clone();
-
-            for i in 1..given_cards.len() {
-                self.souba.add(given_cards[i].1);
-            }
         }
 
         self.times += 1;
