@@ -13,4 +13,6 @@
   echo -n "Sum: "
   cat /tmp/result | grep -o '[0-9]*$' | jq -s 'add'
   cat /tmp/result
-) | tee /tmp/result2
+) > /tmp/result2
+
+less /tmp/result2
