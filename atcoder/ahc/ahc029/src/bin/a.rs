@@ -116,32 +116,32 @@ impl Game {
         {
             let mut cands = BinaryHeap::new();
             cands.push((0, 0, 0)); // priority, card-index, project-index
-            for i in 0..self.hand.len() {
-                let c = &self.hand[i];
-                match c {
-                    &Card::PowerUp if self.times < 500 && self.ell < 1 => {
-                        cands.push((1000, i, 0));
-                    }
-                    &Card::WorkAll(w) => {
-                        cands.push((300 - w, i, 0));
-                    }
-                    &Card::Work(w) => {
-                        let mut maxvalue = 0;
-                        let mut maxarg = (0..self.projects.len())
-                            .min_by_key(|&i| self.projects[i].cost)
-                            .unwrap();
-                        for i in 0..self.projects.len() {
-                            let p = &self.projects[i];
-                            if p.cost <= w && p.value > maxvalue {
-                                maxvalue = p.value;
-                                maxarg = i;
-                            }
-                        }
-                        cands.push((10, i, maxarg));
-                    }
-                    _ => {}
-                }
-            }
+                                   // for i in 0..self.hand.len() {
+                                   //     let c = &self.hand[i];
+                                   //     match c {
+                                   //         &Card::PowerUp if self.times < 500 && self.ell < 1 => {
+                                   //             cands.push((1000, i, 0));
+                                   //         }
+                                   //         &Card::WorkAll(w) => {
+                                   //             cands.push((300 - w, i, 0));
+                                   //         }
+                                   //         &Card::Work(w) => {
+                                   //             let mut maxvalue = 0;
+                                   //             let mut maxarg = (0..self.projects.len())
+                                   //                 .min_by_key(|&i| self.projects[i].cost)
+                                   //                 .unwrap();
+                                   //             for i in 0..self.projects.len() {
+                                   //                 let p = &self.projects[i];
+                                   //                 if p.cost <= w && p.value > maxvalue {
+                                   //                     maxvalue = p.value;
+                                   //                     maxarg = i;
+                                   //                 }
+                                   //             }
+                                   //             cands.push((10, i, maxarg));
+                                   //         }
+                                   //         _ => {}
+                                   //     }
+                                   // }
             let (_, c, p) = cands.pop().unwrap();
             trace!(#use &c, &self.hand[c], p);
             used_index = c;
