@@ -42,7 +42,7 @@ impl Card {
 }
 
 /// 相場
-#[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 struct Souba {
     data: VecDeque<i64>,
     size: usize,
@@ -72,7 +72,6 @@ impl Souba {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Game {
     hand: Vec<Card>,
     num_hand: usize, // N
@@ -84,6 +83,7 @@ struct Game {
     money: i64,
     ell: usize,   // L, 増資カードの使用回数
     souba: Souba, // 提示されるカードの相場
+    rand: XorShift,
 }
 impl Game {
     fn new(hand: Vec<Card>, projects: Vec<Project>, fulltime: usize, num_draw: usize) -> Self {
@@ -98,6 +98,7 @@ impl Game {
             money: 0,
             ell: 0,
             souba: Souba::new(30),
+            rand: XorShift::new(),
         }
     }
     fn exit(&self) -> bool {
@@ -115,7 +116,8 @@ impl Game {
         // 使用カードの選択
         {
             let mut cands = BinaryHeap::new();
-            cands.push((0, 0, 0)); // priority, card-index, project-index
+            let i = self.rand.gen::<usize>() % self.hand.len();
+            cands.push((0, i, 0)); // priority, card-index, project-index
                                    // for i in 0..self.hand.len() {
                                    //     let c = &self.hand[i];
                                    //     match c {
@@ -342,6 +344,68 @@ macro_rules! ndarray {
     ($x:expr; $size:expr $( , $rest:expr )*) => {
         vec![ndarray!($x; $($rest),*); $size]
     };
+}
+
+// @num/random/xorshift
+// @num/random/fromu64
+/// Number - Utility - FromU64
+pub trait FromU64 {
+    fn coerce(x: u64) -> Self;
+}
+impl FromU64 for u64 {
+    fn coerce(x: u64) -> Self {
+        x
+    }
+}
+macro_rules! define_fromu64 {
+    ($ty:ty) => {
+        impl FromU64 for $ty {
+            fn coerce(x: u64) -> Self {
+                x as $ty
+            }
+        }
+    };
+}
+define_fromu64!(usize);
+define_fromu64!(u32);
+define_fromu64!(u128);
+define_fromu64!(i32);
+define_fromu64!(i64);
+define_fromu64!(i128);
+impl FromU64 for bool {
+    fn coerce(x: u64) -> Self {
+        x % 2 == 0
+    }
+}
+impl FromU64 for f32 {
+    fn coerce(x: u64) -> Self {
+        (x as f32) / (std::u64::MAX as f32)
+    }
+}
+impl FromU64 for f64 {
+    fn coerce(x: u64) -> Self {
+        (x as f64) / (std::u64::MAX as f64)
+    }
+}
+
+/// Random Number - Xor-Shift Algorithm
+#[derive(Debug)]
+pub struct XorShift(u64);
+impl XorShift {
+    pub fn new() -> Self {
+        XorShift(88_172_645_463_325_252)
+    }
+    fn next(&mut self) -> u64 {
+        let mut x = self.0;
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        self.0 = x;
+        x
+    }
+    pub fn gen<T: FromU64>(&mut self) -> T {
+        T::coerce(self.next())
+    }
 }
 
 // }}}
