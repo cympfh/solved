@@ -32,12 +32,43 @@ enum Card {
 impl Card {
     fn new(ty: usize, w: i64) -> Self {
         match ty {
-            1 => Card::Work(w),
-            2 => Card::WorkAll(w),
-            3 => Card::Cancel,
-            4 => Card::Tenkan,
+            0 => Card::Work(w),
+            1 => Card::WorkAll(w),
+            2 => Card::Cancel,
+            3 => Card::Tenkan,
             _ => Card::PowerUp,
         }
+    }
+}
+
+/// 相場
+#[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq)]
+struct Souba {
+    data: VecDeque<i64>,
+    size: usize,
+}
+impl Souba {
+    fn new(size: usize) -> Self {
+        Self {
+            data: VecDeque::new(),
+            size,
+        }
+    }
+    fn add(&mut self, x: i64) {
+        self.data.push_back(x);
+        while self.data.len() > self.size {
+            self.data.pop_front();
+        }
+    }
+    fn value(&self) -> i64 {
+        let mut sum = 0;
+        if self.data.is_empty() {
+            return 0;
+        }
+        for i in 0..self.data.len() {
+            sum += self.data[i];
+        }
+        sum / self.data.len() as i64
     }
 }
 
@@ -51,6 +82,8 @@ struct Game {
     fulltime: usize,
     num_draw: usize, // K
     money: i64,
+    ell: usize,   // L, 増資カードの使用回数
+    souba: Souba, // 提示されるカードの相場
 }
 impl Game {
     fn new(hand: Vec<Card>, projects: Vec<Project>, fulltime: usize, num_draw: usize) -> Self {
@@ -63,6 +96,8 @@ impl Game {
             fulltime,
             num_draw,
             money: 0,
+            ell: 0,
+            souba: Souba::new(30),
         }
     }
     fn exit(&self) -> bool {
@@ -70,40 +105,98 @@ impl Game {
     }
     /// solver
     fn play(&mut self) {
-        let card = self.hand.remove(0);
-        println!("0 0");
-        flush();
-        match card {
-            Card::Work(x) => {
-                if let Some(value) = self.projects[0].progress(x) {
-                    self.money += value;
-                    self.projects.remove(0);
+        trace!(#play self.times);
+        trace!(self.money);
+        trace!(&self.projects);
+        trace!(&self.hand);
+        trace!(self.souba.value());
+
+        let used_index;
+        // 使用カードの選択
+        {
+            let mut cands = BinaryHeap::new();
+            cands.push((0, 0, 0)); // priority, card-index, project-index
+            for i in 0..self.hand.len() {
+                let c = &self.hand[i];
+                match c {
+                    &Card::PowerUp if self.times < 500 && self.ell < 1 => {
+                        cands.push((1000, i, 0));
+                    }
+                    &Card::WorkAll(w) => {
+                        cands.push((300 - w, i, 0));
+                    }
+                    &Card::Work(w) => {
+                        let mut maxvalue = 0;
+                        let mut maxarg = (0..self.projects.len())
+                            .min_by_key(|&i| self.projects[i].cost)
+                            .unwrap();
+                        for i in 0..self.projects.len() {
+                            let p = &self.projects[i];
+                            if p.cost <= w && p.value > maxvalue {
+                                maxvalue = p.value;
+                                maxarg = i;
+                            }
+                        }
+                        cands.push((10, i, maxarg));
+                    }
+                    _ => {}
                 }
             }
-            Card::WorkAll(x) => {
-                let m = self.projects.len();
-                let mut done = vec![];
-                for i in 0..m {
-                    if let Some(value) = self.projects[i].progress(x) {
-                        self.money += value;
-                    } else {
-                        done.push(i);
-                    }
-                }
-                done.sort();
-                done.reverse();
-                for i in done {
-                    self.projects.remove(i);
-                }
+            let (_, c, p) = cands.pop().unwrap();
+            trace!(#use &c, &self.hand[c], p);
+            used_index = c;
+            println!("{} {}", c, p);
+            flush();
+        }
+
+        // 使用の副作用
+        match self.hand[used_index] {
+            Card::PowerUp => {
+                self.ell += 1;
             }
             _ => {}
         }
+
+        // プロジェクト状態とお金の更新
         self.refresh();
-        let cands = self.get_next_hands();
-        println!("0");
-        flush();
-        self.hand.insert(0, cands[0].clone());
+
+        // 貰うカードの選択
+        {
+            let given_cards = self.get_next_hands();
+            trace!(&given_cards);
+            let mut cands = BinaryHeap::new();
+            cands.push((0, 0)); // priority, card-index
+                                // for i in 0..given_cards.len() {
+                                //     if given_cards[i].1 > self.money {
+                                //         continue;
+                                //     }
+                                //     match given_cards[i].0 {
+                                //         Card::PowerUp if self.times < 500 && self.ell < 1 => {
+                                //             cands.push((100000, i));
+                                //         }
+                                //         Card::WorkAll(w) if self.times <= 940 => {
+                                //             cands.push((w + 100, i));
+                                //         }
+                                //         Card::Work(w) if self.times <= 900 => {
+                                //             cands.push((w + 10, i));
+                                //         }
+                                //         _ => {}
+                                //     }
+                                // }
+            let (_, c) = cands.pop().unwrap();
+            trace!(#get c, &given_cards[c]);
+            println!("{}", c);
+            flush();
+            self.money -= given_cards[c].1;
+            self.hand[used_index] = given_cards[c].0.clone();
+
+            for i in 1..given_cards.len() {
+                self.souba.add(given_cards[i].1);
+            }
+        }
+
         self.times += 1;
+        trace!(#end);
     }
     fn refresh(&mut self) {
         let mut sc = Scanner::default();
@@ -116,13 +209,14 @@ impl Game {
             .collect();
         self.money = sc.cin();
     }
-    fn get_next_hands(&self) -> Vec<Card> {
+    fn get_next_hands(&self) -> Vec<(Card, i64)> {
         let mut sc = Scanner::default();
         (0..self.num_draw)
             .map(|_| {
                 let ty: usize = sc.cin();
                 let w: i64 = sc.cin();
-                Card::new(ty, w)
+                let p: i64 = sc.cin();
+                (Card::new(ty, w), p)
             })
             .collect()
     }
@@ -152,7 +246,6 @@ fn main() {
         Game::new(hand, projects, t, k)
     };
     while !game.exit() {
-        trace!(game.times);
         game.play();
         flush();
     }
@@ -216,6 +309,15 @@ macro_rules! max {
 }
 #[macro_export]
 macro_rules! trace {
+    (# $label:ident ) => {
+        #[cfg(debug_assertions)]
+        eprintln!("[{}]", stringify!($label));
+    };
+    (# $label:ident $x:expr) => {
+        #[cfg(debug_assertions)]
+        eprintln!("[{}] {} = {:?}", stringify!($label), stringify!($x), $x)
+    };
+    (# $label:ident $($xs:expr),*) => { trace!(# $label ($($xs),*)) };
     ($x:expr) => {
         #[cfg(debug_assertions)]
         eprintln!(">>> {} = {:?}", stringify!($x), $x)
