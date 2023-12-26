@@ -117,7 +117,11 @@ impl Game {
         {
             let mut cands = BinaryHeap::new();
             let i = self.rand.gen::<usize>() % self.hand.len();
-            cands.push((0, i, 0)); // priority, card-index, project-index
+            let j = match self.hand[i] {
+                Card::Cancel => self.projects.len() - 1,
+                _ => 0,
+            };
+            cands.push((0, i, j)); // priority, card-index, project-index
                                    // for i in 0..self.hand.len() {
                                    //     let c = &self.hand[i];
                                    //     match c {

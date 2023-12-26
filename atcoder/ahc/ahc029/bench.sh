@@ -7,12 +7,10 @@
     echo -n "$ID: "
     tail -n1 /tmp/out
   done
-) | tee /tmp/result
+) > /tmp/result
 
 (
   echo -n "Sum: "
   cat /tmp/result | grep -o '[0-9]*$' | jq -s 'add'
   cat /tmp/result
-) > /tmp/result2
-
-echo /tmp/result2
+) | tee /tmp/result2
