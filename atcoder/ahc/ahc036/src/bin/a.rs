@@ -8,6 +8,7 @@ enum Action {
     Nop,
 }
 
+#[derive(Debug, Clone)]
 pub struct Game {
     n: usize,
     la: usize,
@@ -44,6 +45,15 @@ impl Game {
         let pa = self.cluster.segment(u, len);
         self.do_signal(len, pa, pb);
     }
+    fn score(&self) -> usize {
+        let mut r = 0;
+        for &act in self.action_history.iter() {
+            if let Action::Signal(_, _, _) = act {
+                r += 1;
+            }
+        }
+        r
+    }
     fn submit(&self) {
         put!(..self.a);
         for &act in self.action_history.iter() {
@@ -60,6 +70,7 @@ impl Game {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Signal {
     blues: HashSet<usize>,
 }
@@ -83,6 +94,7 @@ impl Signal {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Cluster {
     labels: Vec<usize>,
     flatten: Vec<usize>,
@@ -90,9 +102,12 @@ pub struct Cluster {
     index_of: Vec<usize>,
 }
 impl Cluster {
-    fn new(n: usize, labels: Vec<usize>) -> Self {
+    fn new(n: usize, labels: Vec<usize>, rand: &mut XorShift) -> Self {
         let mut ls: Vec<(usize, usize)> = (0..n).map(|i| (i, labels[i])).collect();
-        ls.sort_by_key(|&(_, label)| label);
+        ls.sort_by_key(|&(_, label)| {
+            let noise = rand.gen::<usize>();
+            (label, noise)
+        });
         let mut flatten = vec![];
         let mut flatten_labels: Vec<usize> = vec![];
         for &(i, label) in ls.iter() {
@@ -209,7 +224,6 @@ fn main() {
     let num_cluster = max!(1, (la + lb - 1) / lb);
     let capacity = 0; // 0 で無効化
     let cluster_labels = kmeans(&pos, num_cluster, capacity);
-    let cluster = Cluster::new(n, cluster_labels);
     // cluster.dump();
 
     // Debug dump K-means
@@ -220,39 +234,38 @@ fn main() {
     //     return;
     // }
 
-    let mut game = Game::new(n, la, lb, cluster);
+    let mut best_game = None;
+    let mut best_score = None;
+    let mut rand = XorShift::new();
 
-    let mut cur = 0;
-    for &goal in tour.iter() {
-        if cur == goal {
-            continue;
-        }
-        let route = dijkstra(cur, goal, &g);
-        for i in 1..route.len() {
-            let u = route[i];
-            if !game.signal.is_blue(u) {
-                game.make_blue(u);
+    loop_timeout_ms!(1900; {
+        let cluster = Cluster::new(n, cluster_labels.clone(), &mut rand);
+        let mut game = Game::new(n, la, lb, cluster.clone());
+        let mut cur = 0;
+        for &goal in tour.iter() {
+            if cur == goal {
+                continue;
             }
-            game.do_move(u);
+            let route = dijkstra(cur, goal, &g);
+            for i in 1..route.len() {
+                let u = route[i];
+                if !game.signal.is_blue(u) {
+                    game.make_blue(u);
+                }
+                game.do_move(u);
+            }
+            cur = goal;
         }
-        cur = goal;
-    }
 
-    // trivial signal pruning
-    // {
-    //     for i in 0..game.action_history.len() {
-    //         let act = game.action_history[i];
-    //         if let Action::Signal(_, _, _) = act {
-    //             game.action_history[i] = Action::Nop;
-    //             if !validate(&game, &tour, &mat) {
-    //                 game.action_history[i] = act;
-    //             }
-    //         }
-    //     }
-    // }
-    // assert!(validate(&game, &tour, &mat));
+        trace!(game.score());
+        if best_score.is_none() || best_score.unwrap() > game.score() {
+            trace!(#NewRecord game.score());
+            best_score = Some(game.score());
+            best_game = Some(game);
+        }
+    });
 
-    game.submit();
+    best_game.unwrap().submit();
 }
 
 /// Graph - Dijkstra
@@ -580,6 +593,98 @@ pub fn kmeans(pos: &Vec<(f64, f64)>, num_cluster: usize, capacity: usize) -> Vec
     }
 
     labels
+}
+
+// @/num/random/xorshift
+// @num/random/fromu64
+/// Number - Utility - FromU64
+pub trait FromU64 {
+    fn coerce(x: u64) -> Self;
+}
+impl FromU64 for u64 {
+    fn coerce(x: u64) -> Self {
+        x
+    }
+}
+macro_rules! define_fromu64 {
+    ($ty:ty) => {
+        impl FromU64 for $ty {
+            fn coerce(x: u64) -> Self {
+                x as $ty
+            }
+        }
+    };
+}
+define_fromu64!(usize);
+define_fromu64!(u32);
+define_fromu64!(u128);
+define_fromu64!(i32);
+define_fromu64!(i64);
+define_fromu64!(i128);
+impl FromU64 for bool {
+    fn coerce(x: u64) -> Self {
+        x % 2 == 0
+    }
+}
+impl FromU64 for f32 {
+    fn coerce(x: u64) -> Self {
+        (x as f32) / (std::u64::MAX as f32)
+    }
+}
+impl FromU64 for f64 {
+    fn coerce(x: u64) -> Self {
+        (x as f64) / (std::u64::MAX as f64)
+    }
+}
+
+/// Random Number - Xor-Shift Algorithm
+pub struct XorShift(u64);
+impl XorShift {
+    pub fn new() -> Self {
+        XorShift(88_172_645_463_325_252)
+    }
+    fn next(&mut self) -> u64 {
+        let mut x = self.0;
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        self.0 = x;
+        x
+    }
+    pub fn gen<T: FromU64>(&mut self) -> T {
+        T::coerce(self.next())
+    }
+    pub fn shuffle<T>(&mut self, xs: &mut Vec<T>) {
+        let n = xs.len();
+        for i in (1..n).rev() {
+            let j = self.gen::<usize>() % (i + 1);
+            if i != j {
+                xs.swap(i, j);
+            }
+        }
+    }
+}
+
+// @/datetime/timed_loop
+/// Time Limited Loop
+#[macro_export]
+macro_rules! loop_timeout_ms {
+    ( $milli_seconds:expr; $body:expr ) => {
+        let now = std::time::SystemTime::now();
+        loop {
+            match now.elapsed() {
+                Ok(elapsed) => {
+                    if elapsed.as_millis() > $milli_seconds {
+                        break;
+                    }
+                    $body
+                }
+                Err(e) => {
+                    eprintln!("Err, {:?}", e);
+                }
+            }
+        }
+    };
 }
 
 // {{{
