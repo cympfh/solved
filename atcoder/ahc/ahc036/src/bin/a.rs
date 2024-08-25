@@ -541,25 +541,57 @@ impl<X: Clone + AGroup> std::ops::AddAssign<X> for Hyper<X> {
     }
 }
 
-pub fn kmeans(pos: &Vec<(f64, f64)>, num_cluster: usize, capacity: usize) -> Vec<usize> {
-    let mut centroids: Vec<(f64, f64)> = (0..num_cluster).map(|i| pos[i]).collect();
-    let mut labels = vec![0; pos.len()];
-
-    fn distance(p: (f64, f64), q: (f64, f64)) -> f64 {
-        (p.0 - q.0).powi(2) + (p.1 - q.1).powi(2)
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct P(f64, f64);
+impl P {
+    fn new(x: f64, y: f64) -> P {
+        P(x, y)
     }
+    fn distance(&self, other: &P) -> f64 {
+        let mut r = 0.0;
+        r += (self.0 - other.0).powi(2);
+        r += (self.1 - other.1).powi(2);
+        r
+    }
+    fn equals(&self, other: &P) -> bool {
+        self.0 == other.0 && self.1 == other.1
+    }
+    fn zero() -> Self {
+        P(0.0, 0.0)
+    }
+    fn max() -> Self {
+        P(f64::MAX, f64::MAX)
+    }
+}
+impl std::ops::AddAssign<P> for P {
+    fn add_assign(&mut self, other: P) {
+        self.0 += other.0;
+        self.1 += other.1;
+    }
+}
+impl std::ops::DivAssign<f64> for P {
+    fn div_assign(&mut self, other: f64) {
+        self.0 /= other;
+        self.1 /= other;
+    }
+}
+
+pub fn kmeans(pos: &Vec<(f64, f64)>, num_cluster: usize, capacity: usize) -> Vec<usize> {
+    let pos: Vec<P> = pos.iter().map(|&(x, y)| P::new(x, y)).collect();
+    let mut centroids: Vec<P> = (0..num_cluster).map(|i| pos[i]).collect();
+    let mut labels = vec![0; pos.len()];
 
     for _time in 0..300 {
         let mut counts = vec![0; num_cluster];
         let mut _score = 0.0;
-        for (i, &(x, y)) in pos.iter().enumerate() {
+        for (i, &p) in pos.iter().enumerate() {
             let mut min_dist = f64::MAX;
             let mut min_idx = 0;
             for (j, &centroid) in centroids.iter().enumerate() {
                 if capacity > 0 && counts[j] >= capacity {
                     continue;
                 }
-                let dist = distance((x, y), centroid);
+                let dist = centroid.distance(&p);
                 if dist < min_dist {
                     min_dist = dist;
                     min_idx = j;
@@ -572,21 +604,18 @@ pub fn kmeans(pos: &Vec<(f64, f64)>, num_cluster: usize, capacity: usize) -> Vec
         trace!(#kmeans _time, _score);
 
         // セントロイドの更新
-        let mut new_centroids = vec![(0.0, 0.0); num_cluster];
+        let mut new_centroids = vec![P::zero(); num_cluster];
         for (i, &label) in labels.iter().enumerate() {
-            new_centroids[label].0 += pos[i].0;
-            new_centroids[label].1 += pos[i].1;
+            new_centroids[label] += pos[i];
         }
         for i in 0..num_cluster {
             if counts[i] > 0 {
-                new_centroids[i].0 /= counts[i] as f64;
-                new_centroids[i].1 /= counts[i] as f64;
+                new_centroids[i] /= counts[i] as f64;
             } else {
-                new_centroids[i] = (f64::MAX, f64::MAX);
+                new_centroids[i] = P::max();
             }
         }
-        if new_centroids == centroids {
-            trace!(#kmeans_converged _time);
+        if centroids == new_centroids {
             break;
         }
         centroids = new_centroids;
