@@ -265,6 +265,7 @@ fn main() {
         }
     });
 
+    eprintln!("score: {}", best_score.unwrap_or(999));
     best_game.unwrap().submit();
 }
 
