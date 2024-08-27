@@ -222,9 +222,10 @@ fn main() {
     }
 
     let num_cluster = max!(1, (la + lb - 1) / lb);
-    let capacity = 0; // 0 で無効化
-    let cluster_labels = kmeans(&pos, num_cluster, capacity);
-    // cluster.dump();
+    // let capacity = 0; // 0 で無効化
+    // let cluster_labels = kmeans(&pos, num_cluster, capacity);
+    let cluster_labels = graph_kmeans(num_cluster, &g);
+    trace!(&cluster_labels);
 
     // Debug dump K-means
     // {
@@ -246,7 +247,7 @@ fn main() {
             if cur == goal {
                 continue;
             }
-            let route = dijkstra(cur, goal, &g);
+            let route = dijkstra_route(cur, goal, &g);
             for i in 1..route.len() {
                 let u = route[i];
                 if !game.signal.is_blue(u) {
@@ -270,7 +271,8 @@ fn main() {
 }
 
 /// Graph - Dijkstra
-pub fn dijkstra(start: usize, goal: usize, neigh: &Vec<Vec<usize>>) -> Vec<usize> {
+/// Returns a path from start to goal
+pub fn dijkstra_route(start: usize, goal: usize, neigh: &Vec<Vec<usize>>) -> Vec<usize> {
     use std::cmp::Reverse;
     use std::collections::BinaryHeap;
     let n = neigh.len();
@@ -302,6 +304,27 @@ pub fn dijkstra(start: usize, goal: usize, neigh: &Vec<Vec<usize>>) -> Vec<usize
     }
     route.reverse();
     route
+}
+
+/// Graph - Dijkstra
+/// Returns a min cost table from start
+pub fn dijkstra_cost(start: usize, neigh: &Vec<Vec<usize>>) -> Vec<Hyper<i64>> {
+    use std::cmp::Reverse;
+    use std::collections::BinaryHeap;
+    let n = neigh.len();
+    let mut d: Vec<Hyper<i64>> = vec![Hyper::Inf; n];
+    let mut q = BinaryHeap::new();
+    d[start] = Hyper::Real(0_i64);
+    q.push((Reverse(d[start]), start));
+    while let Some((_, u)) = q.pop() {
+        for &v in neigh[u].iter() {
+            if d[v] > d[u] + 1 {
+                d[v] = d[u] + 1;
+                q.push((Reverse(d[v]), v));
+            }
+        }
+    }
+    d
 }
 
 // @/algebra/hyper
@@ -575,6 +598,65 @@ impl std::ops::DivAssign<f64> for P {
         self.0 /= other;
         self.1 /= other;
     }
+}
+
+pub fn graph_kmeans(num_cluster: usize, g: &Vec<Vec<usize>>) -> Vec<usize> {
+    let n = g.len();
+    let mut centroids: Vec<usize> = (0..num_cluster).collect();
+    let mut labels = vec![0; n];
+
+    // cost table
+    let mut d = vec![];
+    for i in 0..n {
+        d.push(dijkstra_cost(i, g));
+    }
+
+    // グラフ g の上で group の重心らしきところを探す
+    fn get_centroid(group: &Vec<usize>, d: &Vec<Vec<Hyper<i64>>>) -> usize {
+        let mut r = vec![];
+        let n = d.len();
+        for u in 0..n {
+            let mut sum = Hyper::Real(0);
+            for &v in group.iter() {
+                sum = sum + d[u][v];
+            }
+            r.push((sum, u));
+        }
+        r.sort();
+        r[0].1
+    }
+
+    for _time in 0..300 {
+        let mut groups = vec![vec![]; num_cluster];
+        let mut _score = 0;
+        for u in 0..n {
+            let mut min_dist = Hyper::Inf;
+            let mut min_idx = 0;
+            for j in 0..num_cluster {
+                let v = centroids[j];
+                let dist = d[u][v];
+                if dist < min_dist {
+                    min_dist = dist;
+                    min_idx = j;
+                }
+            }
+            labels[u] = min_idx;
+            groups[min_idx].push(u);
+            _score += min_dist.unwrap();
+        }
+        trace!(#graph_kmeans _time, _score);
+        let mut new_centroids = vec![0; num_cluster];
+        for j in 0..num_cluster {
+            new_centroids[j] = get_centroid(&groups[j], &d);
+        }
+        if centroids == new_centroids {
+            break;
+        }
+        centroids = new_centroids;
+        trace!(#centroids &centroids)
+    }
+
+    labels
 }
 
 pub fn kmeans(pos: &Vec<(f64, f64)>, num_cluster: usize, capacity: usize) -> Vec<usize> {
