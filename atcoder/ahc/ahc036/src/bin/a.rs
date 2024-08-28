@@ -222,9 +222,8 @@ fn main() {
     }
 
     let num_cluster = max!(1, (la + lb - 1) / lb);
-    // let capacity = 0; // 0 で無効化
-    // let cluster_labels = kmeans(&pos, num_cluster, capacity);
-    let cluster_labels = graph_kmeans(num_cluster, &g);
+    // let cluster_labels = kmeans::xy(&pos, num_cluster, 0);
+    let cluster_labels = kmeans::graph(num_cluster, &g);
     trace!(&cluster_labels);
 
     // Debug dump K-means
@@ -600,111 +599,108 @@ impl std::ops::DivAssign<f64> for P {
     }
 }
 
-pub fn graph_kmeans(num_cluster: usize, g: &Vec<Vec<usize>>) -> Vec<usize> {
-    let n = g.len();
-    let mut centroids: Vec<usize> = (0..num_cluster).collect();
-    let mut labels = vec![0; n];
-
-    // cost table
-    let mut d = vec![];
-    for i in 0..n {
-        d.push(dijkstra_cost(i, g));
-    }
-
-    // グラフ g の上で group の重心らしきところを探す
-    fn get_centroid(group: &Vec<usize>, d: &Vec<Vec<Hyper<i64>>>) -> usize {
-        let mut r = vec![];
-        let n = d.len();
-        for u in 0..n {
-            let mut sum = Hyper::Real(0);
-            for &v in group.iter() {
-                sum = sum + d[u][v];
+pub mod kmeans {
+    /// xy 二次元上の普通の k-means
+    pub fn xy(pos: &Vec<(f64, f64)>, num_cluster: usize, capacity: usize) -> Vec<usize> {
+        let pos: Vec<P> = pos.iter().map(|&(x, y)| P::new(x, y)).collect();
+        let mut centroids: Vec<P> = (0..num_cluster).map(|i| pos[i]).collect();
+        let mut labels = vec![0; pos.len()];
+        for _time in 0..300 {
+            let mut counts = vec![0; num_cluster];
+            let mut _score = 0.0;
+            for (i, &p) in pos.iter().enumerate() {
+                let mut min_dist = f64::MAX;
+                let mut min_idx = 0;
+                for (j, &centroid) in centroids.iter().enumerate() {
+                    if capacity > 0 && counts[j] >= capacity {
+                        continue;
+                    }
+                    let dist = centroid.distance(&p);
+                    if dist < min_dist {
+                        min_dist = dist;
+                        min_idx = j;
+                    }
+                }
+                labels[i] = min_idx;
+                counts[min_idx] += 1;
+                _score += min_dist;
             }
-            r.push((sum, u));
+            trace!(#kmeans _time, _score);
+            // セントロイドの更新
+            let mut new_centroids = vec![P::zero(); num_cluster];
+            for (i, &label) in labels.iter().enumerate() {
+                new_centroids[label] += pos[i];
+            }
+            for i in 0..num_cluster {
+                if counts[i] > 0 {
+                    new_centroids[i] /= counts[i] as f64;
+                } else {
+                    new_centroids[i] = P::max();
+                }
+            }
+            if centroids == new_centroids {
+                break;
+            }
+            centroids = new_centroids;
         }
-        r.sort();
-        r[0].1
+        labels
     }
 
-    for _time in 0..300 {
-        let mut groups = vec![vec![]; num_cluster];
-        let mut _score = 0;
-        for u in 0..n {
-            let mut min_dist = Hyper::Inf;
-            let mut min_idx = 0;
+    // グラフ上の距離で k-means
+    pub fn graph(num_cluster: usize, g: &Vec<Vec<usize>>) -> Vec<usize> {
+        let n = g.len();
+        let mut centroids: Vec<usize> = (0..num_cluster).collect();
+        let mut labels = vec![0; n];
+        // cost table
+        let mut d = vec![];
+        for i in 0..n {
+            d.push(dijkstra_cost(i, g));
+        }
+        // グラフ g の上で group の重心らしきところを探す
+        fn get_centroid(group: &Vec<usize>, d: &Vec<Vec<Hyper<i64>>>) -> usize {
+            let mut r = vec![];
+            let n = d.len();
+            for u in 0..n {
+                let mut sum = Hyper::Real(0);
+                for &v in group.iter() {
+                    sum = sum + d[u][v];
+                }
+                r.push((sum, u));
+            }
+            r.sort();
+            r[0].1
+        }
+        for _time in 0..300 {
+            let mut groups = vec![vec![]; num_cluster];
+            let mut _score = 0;
+            for u in 0..n {
+                let mut min_dist = Hyper::Inf;
+                let mut min_idx = 0;
+                for j in 0..num_cluster {
+                    let v = centroids[j];
+                    let dist = d[u][v];
+                    if dist < min_dist {
+                        min_dist = dist;
+                        min_idx = j;
+                    }
+                }
+                labels[u] = min_idx;
+                groups[min_idx].push(u);
+                _score += min_dist.unwrap();
+            }
+            trace!(#graph_kmeans _time, _score);
+            let mut new_centroids = vec![0; num_cluster];
             for j in 0..num_cluster {
-                let v = centroids[j];
-                let dist = d[u][v];
-                if dist < min_dist {
-                    min_dist = dist;
-                    min_idx = j;
-                }
+                new_centroids[j] = get_centroid(&groups[j], &d);
             }
-            labels[u] = min_idx;
-            groups[min_idx].push(u);
-            _score += min_dist.unwrap();
+            if centroids == new_centroids {
+                break;
+            }
+            centroids = new_centroids;
+            trace!(#centroids &centroids)
         }
-        trace!(#graph_kmeans _time, _score);
-        let mut new_centroids = vec![0; num_cluster];
-        for j in 0..num_cluster {
-            new_centroids[j] = get_centroid(&groups[j], &d);
-        }
-        if centroids == new_centroids {
-            break;
-        }
-        centroids = new_centroids;
-        trace!(#centroids &centroids)
+        labels
     }
-
-    labels
-}
-
-pub fn kmeans(pos: &Vec<(f64, f64)>, num_cluster: usize, capacity: usize) -> Vec<usize> {
-    let pos: Vec<P> = pos.iter().map(|&(x, y)| P::new(x, y)).collect();
-    let mut centroids: Vec<P> = (0..num_cluster).map(|i| pos[i]).collect();
-    let mut labels = vec![0; pos.len()];
-
-    for _time in 0..300 {
-        let mut counts = vec![0; num_cluster];
-        let mut _score = 0.0;
-        for (i, &p) in pos.iter().enumerate() {
-            let mut min_dist = f64::MAX;
-            let mut min_idx = 0;
-            for (j, &centroid) in centroids.iter().enumerate() {
-                if capacity > 0 && counts[j] >= capacity {
-                    continue;
-                }
-                let dist = centroid.distance(&p);
-                if dist < min_dist {
-                    min_dist = dist;
-                    min_idx = j;
-                }
-            }
-            labels[i] = min_idx;
-            counts[min_idx] += 1;
-            _score += min_dist;
-        }
-        trace!(#kmeans _time, _score);
-
-        // セントロイドの更新
-        let mut new_centroids = vec![P::zero(); num_cluster];
-        for (i, &label) in labels.iter().enumerate() {
-            new_centroids[label] += pos[i];
-        }
-        for i in 0..num_cluster {
-            if counts[i] > 0 {
-                new_centroids[i] /= counts[i] as f64;
-            } else {
-                new_centroids[i] = P::max();
-            }
-        }
-        if centroids == new_centroids {
-            break;
-        }
-        centroids = new_centroids;
-    }
-
-    labels
 }
 
 // @/num/random/xorshift
