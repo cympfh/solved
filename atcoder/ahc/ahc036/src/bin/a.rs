@@ -230,7 +230,7 @@ fn main() {
             if cur == goal {
                 continue;
             }
-            let route = dijkstra::route(cur, goal, &g);
+            let route = dijkstra::route_clustered(cur, goal, &g, &cluster);
             for i in 1..route.len() {
                 let u = route[i];
                 if !game.signal.is_blue(u) {
@@ -254,7 +254,7 @@ fn main() {
 
 /// Graph - Dijkstra
 pub mod dijkstra {
-    use crate::{Graph, Hyper};
+    use crate::{Cluster, Graph, Hyper};
 
     /// Returns a path from start to goal
     pub fn route(start: usize, goal: usize, g: &Graph) -> Vec<usize> {
@@ -307,6 +307,59 @@ pub mod dijkstra {
             }
         }
         d
+    }
+
+    /// Returns a path from start to goal
+    /// クラスタを考慮する
+    /// 同じクラスタ内の移動は軽いものとする
+    pub fn route_clustered(start: usize, goal: usize, g: &Graph, cluster: &Cluster) -> Vec<usize> {
+        const COST_INNER: i64 = 2;
+        const COST_OUTER: i64 = 5;
+        use std::cmp::Reverse;
+        use std::collections::BinaryHeap;
+        let mut d: Vec<Hyper<i64>> = vec![Hyper::Inf; g.n];
+        let mut q = BinaryHeap::new();
+        d[start] = Hyper::Real(0);
+        q.push((Reverse(d[start]), start));
+        let mut used = vec![false; g.n];
+        while let Some((_, u)) = q.pop() {
+            if u == goal {
+                continue;
+            }
+            if used[u] {
+                continue;
+            }
+            used[u] = true;
+            for &v in g.neigh[u].iter() {
+                let cost = if cluster.labels[u] == cluster.labels[v] {
+                    COST_INNER
+                } else {
+                    COST_OUTER
+                };
+                if d[v] > d[u] + cost {
+                    d[v] = d[u] + cost;
+                    q.push((Reverse(d[v]), v));
+                }
+            }
+        }
+        let mut route = vec![goal];
+        let mut u = goal;
+        while u != start {
+            for &v in g.neigh[u].iter() {
+                let cost = if cluster.labels[u] == cluster.labels[v] {
+                    COST_INNER
+                } else {
+                    COST_OUTER
+                };
+                if d[v] + cost == d[u] {
+                    u = v;
+                    break;
+                }
+            }
+            route.push(u);
+        }
+        route.reverse();
+        route
     }
 }
 
