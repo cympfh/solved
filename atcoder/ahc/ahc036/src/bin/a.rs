@@ -54,6 +54,22 @@ impl Game {
         }
         r
     }
+    fn stat(&self) {
+        let mut num_signal = 0;
+        let mut num_move = 0;
+        for &act in self.action_history.iter() {
+            match act {
+                Action::Signal(_, _, _) => {
+                    num_signal += 1;
+                }
+                Action::Move(_) => {
+                    num_move += 1;
+                }
+                _ => {}
+            }
+        }
+        trace!(num_signal, num_move, num_signal + num_move)
+    }
     fn submit(&self) {
         put!(..self.a);
         for &act in self.action_history.iter() {
@@ -191,7 +207,6 @@ fn main() {
     }
 
     let num_cluster = max!(1, (la + lb - 1) / lb);
-    // let cluster_labels = kmeans::xy(&pos, num_cluster, 0);
     let cluster_labels = kmeans::tour_subgraph(num_cluster, &tour, &g);
 
     // Debug dump K-means
@@ -225,8 +240,7 @@ fn main() {
             }
             cur = goal;
         }
-
-        trace!(game.score());
+        game.stat();
         if best_score.is_none() || best_score.unwrap() > game.score() {
             trace!(#NewRecord game.score());
             best_score = Some(game.score());
@@ -869,6 +883,87 @@ impl Graph {
         self.mat[v][u] = true;
         self.neigh[u].push(v);
         self.neigh[v].push(u);
+    }
+    /// 最小全域木を新しいグラフとして構築して返す, Kruskal
+    fn spanning(&self) -> Self {
+        let mut edges = vec![];
+        for u in 0..self.n {
+            for v in u + 1..self.n {
+                if self.mat[u][v] {
+                    edges.push((u, v));
+                }
+            }
+        }
+        let mut uf = UnionFind::new(self.n);
+        let mut newg = Graph::new(self.n);
+        let mut cx = 0;
+        trace!(#spanning edges.len());
+        for (u, v) in edges {
+            if uf.is_same(u, v) {
+                continue;
+            }
+            uf.merge(u, v);
+            newg.add_edge(u, v);
+            cx += 1;
+        }
+        trace!(#spanning  cx);
+        newg
+    }
+}
+
+// @/set/union_find
+/// Set - Union-Find
+#[derive(Debug, Clone)]
+pub struct UnionFind {
+    data: Vec<UF>,
+}
+
+#[derive(Debug, Clone)]
+enum UF {
+    Root(usize),
+    Child(usize),
+}
+
+impl UnionFind {
+    pub fn new(n: usize) -> Self {
+        UnionFind {
+            data: vec![UF::Root(1); n],
+        }
+    }
+    pub fn root(&mut self, x: usize) -> usize {
+        match self.data[x] {
+            UF::Root(_) => x,
+            UF::Child(parent) => {
+                let root = self.root(parent);
+                self.data[x] = UF::Child(root);
+                root
+            }
+        }
+    }
+    pub fn is_same(&mut self, x: usize, y: usize) -> bool {
+        self.root(x) == self.root(y)
+    }
+    pub fn size(&mut self, x: usize) -> usize {
+        let r = self.root(x);
+        match self.data[r] {
+            UF::Root(size) => size,
+            UF::Child(_) => 0,
+        }
+    }
+    pub fn merge(&mut self, x: usize, y: usize) {
+        let root_x = self.root(x);
+        let root_y = self.root(y);
+        if root_x != root_y {
+            let size_x = self.size(root_x);
+            let size_y = self.size(root_y);
+            let (i, j) = if size_x > size_y {
+                (root_x, root_y)
+            } else {
+                (root_y, root_x)
+            };
+            self.data[i] = UF::Root(size_x + size_y);
+            self.data[j] = UF::Child(i);
+        }
     }
 }
 
