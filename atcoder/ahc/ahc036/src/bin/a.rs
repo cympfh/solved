@@ -176,15 +176,11 @@ fn main() {
     let t: usize = sc.cin();
     let la: usize = sc.cin();
     let lb: usize = sc.cin();
-    let mut g = vec![vec![]; n];
-    let mut mat = vec![vec![false; n]; n];
+    let mut g = Graph::new(n);
     for _ in 0..m {
         let u: usize = sc.cin();
         let v: usize = sc.cin();
-        g[u].push(v);
-        g[v].push(u);
-        mat[u][v] = true;
-        mat[v][u] = true;
+        g.add_edge(u, v);
     }
     let tour: Vec<usize> = sc.vec(t);
     let mut pos: Vec<(f64, f64)> = vec![];
@@ -244,14 +240,13 @@ fn main() {
 
 /// Graph - Dijkstra
 pub mod dijkstra {
-    use crate::Hyper;
+    use crate::{Graph, Hyper};
 
     /// Returns a path from start to goal
-    pub fn route(start: usize, goal: usize, neigh: &Vec<Vec<usize>>) -> Vec<usize> {
+    pub fn route(start: usize, goal: usize, g: &Graph) -> Vec<usize> {
         use std::cmp::Reverse;
         use std::collections::BinaryHeap;
-        let n = neigh.len();
-        let mut d: Vec<Hyper<i64>> = vec![Hyper::Inf; n];
+        let mut d: Vec<Hyper<i64>> = vec![Hyper::Inf; g.n];
         let mut q = BinaryHeap::new();
         d[start] = Hyper::Real(0);
         q.push((Reverse(d[start]), start));
@@ -259,7 +254,7 @@ pub mod dijkstra {
             if u == goal {
                 continue;
             }
-            for &v in neigh[u].iter() {
+            for &v in g.neigh[u].iter() {
                 if d[v] > d[u] + 1 {
                     d[v] = d[u] + 1;
                     q.push((Reverse(d[v]), v));
@@ -269,7 +264,7 @@ pub mod dijkstra {
         let mut route = vec![goal];
         let mut u = goal;
         while u != start {
-            for &v in neigh[u].iter() {
+            for &v in g.neigh[u].iter() {
                 if d[v] + 1 == d[u] {
                     u = v;
                     break;
@@ -282,16 +277,15 @@ pub mod dijkstra {
     }
 
     /// Returns a min cost table from start
-    pub fn cost(start: usize, neigh: &Vec<Vec<usize>>) -> Vec<Hyper<i64>> {
+    pub fn cost(start: usize, g: &Graph) -> Vec<Hyper<i64>> {
         use std::cmp::Reverse;
         use std::collections::BinaryHeap;
-        let n = neigh.len();
-        let mut d: Vec<Hyper<i64>> = vec![Hyper::Inf; n];
+        let mut d: Vec<Hyper<i64>> = vec![Hyper::Inf; g.n];
         let mut q = BinaryHeap::new();
         d[start] = Hyper::Real(0_i64);
         q.push((Reverse(d[start]), start));
         while let Some((_, u)) = q.pop() {
-            for &v in neigh[u].iter() {
+            for &v in g.neigh[u].iter() {
                 if d[v] > d[u] + 1 {
                     d[v] = d[u] + 1;
                     q.push((Reverse(d[v]), v));
@@ -576,7 +570,7 @@ impl std::ops::DivAssign<f64> for P {
 }
 
 pub mod kmeans {
-    use crate::{dijkstra, min, trace, Hyper, P};
+    use crate::{dijkstra, min, trace, Graph, Hyper, P};
 
     /// xy 二次元上の普通の k-means
     pub fn xy(pos: &Vec<(f64, f64)>, num_cluster: usize, capacity: usize) -> Vec<usize> {
@@ -625,13 +619,12 @@ pub mod kmeans {
     }
 
     // グラフ上の距離で k-means
-    pub fn graph(num_cluster: usize, g: &Vec<Vec<usize>>) -> Vec<usize> {
-        let n = g.len();
+    pub fn graph(num_cluster: usize, g: &Graph) -> Vec<usize> {
         let mut centroids: Vec<usize> = (0..num_cluster).collect();
-        let mut labels = vec![0; n];
+        let mut labels = vec![0; g.n];
         // cost table
         let mut d = vec![];
-        for i in 0..n {
+        for i in 0..g.n {
             d.push(dijkstra::cost(i, g));
         }
         // グラフ g の上で group の重心らしきところを探す
@@ -651,7 +644,7 @@ pub mod kmeans {
         for _time in 0..300 {
             let mut groups = vec![vec![]; num_cluster];
             let mut _score = 0;
-            for u in 0..n {
+            for u in 0..g.n {
                 let mut min_dist = Hyper::Inf;
                 let mut min_idx = 0;
                 for j in 0..num_cluster {
@@ -680,15 +673,10 @@ pub mod kmeans {
     }
 
     /// たどるパスからなる部分グラフについて kmeans する
-    pub fn tour_subgraph(
-        num_cluster: usize,
-        goals: &Vec<usize>,
-        g: &Vec<Vec<usize>>,
-    ) -> Vec<usize> {
+    pub fn tour_subgraph(num_cluster: usize, goals: &Vec<usize>, g: &Graph) -> Vec<usize> {
         use crate::loop_timeout_ms;
         use std::collections::BTreeSet;
         use Hyper::*;
-        let n = g.len();
         let mut vtx = BTreeSet::new();
         {
             let mut u = 0;
@@ -701,10 +689,10 @@ pub mod kmeans {
             }
         };
         let vtx: Vec<usize> = vtx.iter().cloned().collect();
-        trace!(n, vtx.len());
+        trace!(g.n, vtx.len());
         // cost table
         let mut d = vec![];
-        for i in 0..n {
+        for i in 0..g.n {
             d.push(dijkstra::cost(i, g));
         }
         fn get_centroid(group: &Vec<usize>, d: &Vec<Vec<Hyper<i64>>>, vtx: &Vec<usize>) -> usize {
@@ -720,13 +708,13 @@ pub mod kmeans {
             r[0].1
         }
         let mut rand = crate::XorShift::new();
-        let mut min_labels = vec![999; n];
+        let mut min_labels = vec![999; g.n];
         let mut min_score: i64 = -1;
         let mut vtx_shuffled = vtx.clone();
         loop_timeout_ms!(500; {
             rand.shuffle(&mut vtx_shuffled);
             let mut centroids: Vec<usize> = (0..num_cluster).map(|i| vtx_shuffled[i % vtx.len()]).collect();
-            let mut labels = vec![999; n];
+            let mut labels = vec![999; g.n];
             let mut score = 0;
             for _time in 0..300 {
                 let mut groups = vec![vec![]; num_cluster];
@@ -860,6 +848,28 @@ macro_rules! loop_timeout_ms {
             }
         }
     };
+}
+
+pub struct Graph {
+    pub n: usize,
+    pub neigh: Vec<Vec<usize>>,
+    pub mat: Vec<Vec<bool>>,
+}
+impl Graph {
+    fn new(n: usize) -> Self {
+        let neigh = vec![vec![]; n];
+        let mat = vec![vec![false; n]; n];
+        Self { n, neigh, mat }
+    }
+    fn add_edge(&mut self, u: usize, v: usize) {
+        if self.mat[u][v] {
+            return;
+        }
+        self.mat[u][v] = true;
+        self.mat[v][u] = true;
+        self.neigh[u].push(v);
+        self.neigh[v].push(u);
+    }
 }
 
 // {{{
