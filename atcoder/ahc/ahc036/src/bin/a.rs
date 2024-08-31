@@ -685,6 +685,7 @@ pub mod kmeans {
         goals: &Vec<usize>,
         g: &Vec<Vec<usize>>,
     ) -> Vec<usize> {
+        use crate::loop_timeout_ms;
         use std::collections::BTreeSet;
         use Hyper::*;
         let n = g.len();
@@ -718,41 +719,54 @@ pub mod kmeans {
             r.sort();
             r[0].1
         }
-        let mut centroids: Vec<usize> = (0..num_cluster).map(|i| vtx[i % vtx.len()]).collect();
-        let mut labels = vec![999; n];
-        for _time in 0..300 {
-            let mut groups = vec![vec![]; num_cluster];
-            let mut _score = 0;
-            for &u in vtx.iter() {
-                let mut min_dist = Hyper::Inf;
-                let mut min_idx = 0;
-                for j in 0..num_cluster {
-                    let v = centroids[j];
-                    let dist = d[u][v];
-                    if dist < min_dist {
-                        min_dist = dist;
-                        min_idx = j;
+        let mut rand = crate::XorShift::new();
+        let mut min_labels = vec![999; n];
+        let mut min_score: i64 = -1;
+        let mut vtx_shuffled = vtx.clone();
+        loop_timeout_ms!(500; {
+            rand.shuffle(&mut vtx_shuffled);
+            let mut centroids: Vec<usize> = (0..num_cluster).map(|i| vtx_shuffled[i % vtx.len()]).collect();
+            let mut labels = vec![999; n];
+            let mut score = 0;
+            for _time in 0..300 {
+                let mut groups = vec![vec![]; num_cluster];
+                score = 0;
+                for &u in vtx.iter() {
+                    let mut min_dist = Hyper::Inf;
+                    let mut min_idx = 0;
+                    for j in 0..num_cluster {
+                        let v = centroids[j];
+                        let dist = d[u][v];
+                        if dist < min_dist {
+                            min_dist = dist;
+                            min_idx = j;
+                        }
                     }
+                    labels[u] = min_idx;
+                    groups[min_idx].push(u);
+                    score += match min_dist {
+                        Hyper::Real(x) => x,
+                        Hyper::Inf => 1000000,
+                        Hyper::NegInf => -1000000,
+                    };
                 }
-                labels[u] = min_idx;
-                groups[min_idx].push(u);
-                _score += match min_dist {
-                    Hyper::Real(x) => x,
-                    Hyper::Inf => 1000000,
-                    Hyper::NegInf => -1000000,
-                };
+                trace!(#graph_kmeans _time, score);
+                let mut new_centroids = vec![0; num_cluster];
+                for j in 0..num_cluster {
+                    new_centroids[j] = get_centroid(&groups[j], &d, &vtx);
+                }
+                if centroids == new_centroids {
+                    break;
+                }
+                centroids = new_centroids;
             }
-            trace!(#graph_kmeans _time, _score);
-            let mut new_centroids = vec![0; num_cluster];
-            for j in 0..num_cluster {
-                new_centroids[j] = get_centroid(&groups[j], &d, &vtx);
+            if min_score <= 0 || score < min_score {
+                min_score = score;
+                min_labels = labels;
             }
-            if centroids == new_centroids {
-                break;
-            }
-            centroids = new_centroids;
-        }
-        labels
+        });
+        trace!(min_score);
+        min_labels
     }
 }
 
