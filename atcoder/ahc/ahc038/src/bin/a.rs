@@ -1,12 +1,12 @@
 #![allow(unused_imports, unused_macros, dead_code)]
 use std::{cmp::*, collections::*};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Direction {
-    L,
     R,
-    U,
     D,
+    L,
+    U,
     Nop,
 }
 impl Direction {
@@ -40,6 +40,13 @@ impl Operation {
     }
 }
 
+/// 実行計画の気持ち
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Get,
+    Put,
+}
+
 #[derive(Debug, Clone)]
 pub struct Game {
     /// ボードサイズ
@@ -54,14 +61,20 @@ pub struct Game {
     initial_arm: CrossArm,
     /// 操作列
     operations: Vec<Operation>,
+    /// 実行計画
+    mode: Mode,
+    /// random generator
+    rand: XorShift,
     /// for DEBUG
     abort: bool,
     time: usize,
 }
 
 impl Game {
-    fn new(n: i64, balls: BTreeSet<(i64, i64)>, requires: BTreeSet<(i64, i64)>) -> Self {
-        let (arm, initial_commands) = CrossArm::new();
+    fn new(n: i64, v: usize, balls: BTreeSet<(i64, i64)>, requires: BTreeSet<(i64, i64)>) -> Self {
+        let (arm, initial_commands) = CrossArm::new(v - 1);
+        trace!(&arm);
+        trace!(&initial_commands);
         let initial_arm = arm.clone();
         let initial_time = initial_commands.len();
         Self {
@@ -71,6 +84,8 @@ impl Game {
             arm,
             initial_arm,
             operations: initial_commands,
+            mode: Mode::Get,
+            rand: XorShift::new(),
             abort: false,
             time: initial_time,
         }
@@ -126,66 +141,67 @@ impl Game {
     }
     /// 実行計画を決めて実行する
     fn run(&mut self) {
+        if self.time > 100000 {
+            self.abort = true;
+        }
         use Direction::*;
         let mut cands = vec![];
         for d in [U, D, L, R, Nop] {
             for rot in [L, R, Nop] {
-                cands.push(self.goodness(d, rot));
+                if let Some(c) = self.goodness(d, rot) {
+                    cands.push(c);
+                }
             }
         }
-        cands.sort_by_key(&|&(score, _): &(i64, Operation)| -score); // DESC BY score
+        cands.sort_by_key(|(score, op, _): &(i64, Operation, _)| (-score, op.mov));
+        // 沼ってるときにランダムに抜け出すことを期待する
+        if self.time > 1000 && (self.time % 200) < 10 {
+            self.rand.shuffle(&mut cands);
+        }
         #[cfg(debug_assertions)]
         {
             // DEBUG
-            if self.time > 2000 {
-                trace!(self.time);
+            const BREAKPOINT: usize = 1000;
+            if self.time + 5 > BREAKPOINT {
+                eprintln!("\x1b[41mtime\x1b[0m {}", self.time);
+                trace!(self.mode);
                 trace!(&self.arm);
                 for c in cands.iter() {
                     trace!(c);
                 }
             }
-            if self.time > 2000 {
+            if self.time >= BREAKPOINT {
                 self.abort = true;
             }
         }
-        let (_best_score, best_op) = cands[0].clone();
+        let (_best_score, best_op, best_mode) = cands[0].clone();
         self.execute(best_op);
+        self.mode = best_mode;
     }
 
     /// (+d*rot) するとしての良さとそのときの Operation
-    fn goodness(&self, d: Direction, rot: Direction) -> (i64, Operation) {
+    /// 違法手の場合は None
+    fn goodness(&self, d: Direction, rot: Direction) -> Option<(i64, Operation, Mode)> {
         use Direction::*;
         let mut arm = self.arm.clone();
         arm += d;
         arm *= rot;
         let mut score = 0;
-        if arm.center.0 < -1
-            || arm.center.0 >= self.n
-            || arm.center.1 < -1
-            || arm.center.1 >= self.n
+        if arm.center.0 < 0 || arm.center.0 >= self.n || arm.center.1 < 0 || arm.center.1 >= self.n
         {
-            // out of range?
-            return (-1_000_000_000, Operation::nop(arm.v));
+            // out of range
+            return None;
         }
-        // フチ
-        if arm.center.0 <= 0
-            || arm.center.1 <= 0
-            || arm.center.0 >= self.n - -1
-            || arm.center.1 >= self.n - -1
+        if arm.center.0 < 1
+            || arm.center.0 >= self.n - 1
+            || arm.center.1 < 1
+            || arm.center.1 >= self.n - 1
         {
-            score -= 10;
+            score -= 20;
         }
-        // 何もしないのは良くない
-        {
-            if d == Nop {
-                score -= 2;
-            }
-            if rot == Nop {
-                score -= 1;
-            }
-        }
-        // 即座に get/put できるかチェック
         let mut tako = vec![false; arm.v + 1];
+        let mut rm_balls = BTreeSet::new();
+        let mut rm_requires = BTreeSet::new();
         {
             for i in 0..arm.v {
                 let pos = arm.leave_pos(i);
@@ -194,18 +210,31 @@ impl Game {
                     tako[i + 1] = true;
                     arm.num_tako += 1;
                     arm.has[i] = true;
+                    rm_balls.insert(pos);
                 } else if arm.has[i] && self.requires.contains(&pos) {
                     score += 100;
                     tako[i + 1] = true;
                     arm.num_tako -= 1;
                     arm.has[i] = false;
+                    rm_requires.insert(pos);
                 }
             }
         }
-        if arm.num_tako < arm.v && !self.balls.is_empty() {
+        // 次の実行計画
+        let mode = if self.mode == Mode::Get && (arm.is_full() || self.balls.is_empty()) {
+            Mode::Put
+        } else if self.mode == Mode::Put && arm.is_empty() {
+            Mode::Get
+        } else {
+            self.mode
+        };
+        if mode == Mode::Get {
             // 新しいたこ焼きを拾いに行く
             let mut min_dist = 1_000_000_000;
             for &(x, y) in self.balls.iter() {
+                if rm_balls.contains(&(x, y)) {
+                    continue;
+                }
                 for i in 0..self.arm.v {
                     if arm.has[i] {
                         continue;
@@ -221,6 +250,9 @@ impl Game {
             // 置く
             let mut min_dist = 1_000_000_000;
             for &(x, y) in self.requires.iter() {
+                if rm_requires.contains(&(x, y)) {
+                    continue;
+                }
                 for i in 0..self.arm.v {
                     if !arm.has[i] {
                         continue;
@@ -233,15 +265,21 @@ impl Game {
                 score -= min_dist;
             }
         }
-        (
+        Some((
             score,
             Operation {
                 mov: d,
                 rot: vec![rot; arm.v],
                 tako,
             },
-        )
+            mode,
+        ))
     }
+}
+
+/// 90 度回転
+fn rot90(x: (i64, i64)) -> (i64, i64) {
+    (x.1, -x.0)
 }
 
 #[derive(Debug, Clone)]
@@ -260,35 +298,65 @@ impl CrossArm {
     // 3 -- 0 -- 1
     //      |
     //      2
-    fn new() -> (Self, Vec<Operation>) {
+    fn new(v: usize) -> (Self, Vec<Operation>) {
         use Direction::*;
-        let tree = vec![(0, 1), (0, 1), (0, 1), (0, 1)];
-        let leaves = vec![(0, 1), (1, 0), (0, -1), (-1, 0)];
-        let has = vec![false, false, false, false];
+        let mut tree = vec![];
+        let mut leaves = vec![];
+        for i in 0..v {
+            let group_id = i / 4;
+            let len = group_id + 1;
+            let mut pos = (0_i64, len as i64);
+            for _ in 0..i % 4 {
+                pos = rot90(pos);
+            }
+            tree.push((0, len));
+            leaves.push(pos);
+        }
+
+        let has = vec![false; v];
         let arm = Self {
             center: (1, 1),
-            v: 4,
+            v,
             tree,
             leaves,
             has,
             num_tako: 0,
         };
-        let command = vec![
-            Operation {
+        let mut command = vec![];
+        {
+            let mut rot = vec![Nop; v];
+            let tako = vec![false; v + 1];
+            for i in 0..v {
+                rot[i] = match i % 4 {
+                    1 | 2 => R,
+                    3 => L,
+                    _ => Nop,
+                };
+            }
+            command.push(Operation {
                 mov: Nop,
-                rot: vec![Nop, R, R, L],
-                tako: vec![false, false, false, false, false],
-            },
-            Operation {
+                rot: rot.clone(),
+                tako: tako.clone(),
+            });
+            for i in 0..v {
+                rot[i] = match i % 4 {
+                    2 => R,
+                    _ => Nop,
+                };
+            }
+            command.push(Operation {
                 mov: Nop,
-                rot: vec![Nop, Nop, R, Nop],
-                tako: vec![false, false, false, false, false],
-            },
-        ];
+                rot,
+                tako,
+            });
+        };
         (arm, command)
     }
     fn is_full(&self) -> bool {
         self.num_tako == self.v
+    }
+    fn is_empty(&self) -> bool {
+        self.num_tako == 0
     }
     /// 葉っぱ i の座標
     fn leave_pos(&self, i: usize) -> (i64, i64) {
@@ -325,14 +393,14 @@ impl std::ops::Add<Direction> for &CrossArm {
 impl std::ops::MulAssign<Direction> for CrossArm {
     fn mul_assign(&mut self, d: Direction) {
         use Direction::*;
-        match d {
-            L => {
-                self.leaves.rotate_right(1);
+        for i in 0..self.v {
+            if d == R {
+                self.leaves[i] = rot90(self.leaves[i]);
+            } else if d == L {
+                self.leaves[i] = rot90(self.leaves[i]);
+                self.leaves[i] = rot90(self.leaves[i]);
+                self.leaves[i] = rot90(self.leaves[i]);
             }
-            R => {
-                self.leaves.rotate_left(1);
-            }
-            _ => {}
         }
     }
 }
@@ -349,7 +417,7 @@ fn main() {
     let mut sc = Scanner::default();
     let n: usize = sc.cin();
     let _m: usize = sc.cin();
-    let _v: usize = sc.cin();
+    let v: usize = sc.cin();
 
     let mut balls = BTreeSet::new();
     for i in 0..n {
@@ -384,16 +452,92 @@ fn main() {
         }
     }
 
-    let mut game = Game::new(n as i64, balls, requires);
+    let mut game = Game::new(n as i64, v, balls, requires);
     while !game.end() {
         game.run();
     }
-    trace!(&game.balls, &game.requires);
+    if game.balls.is_empty() && game.requires.is_empty() {
+        eprintln!("\x1b[32mSUCCESS\x1b[0m");
+        eprintln!("\x1b[42mscore\x1b[0m {}", game.operations.len());
+    } else {
+        eprintln!("\x1b[31mABORT\x1b[0m");
+        trace!(&game.balls, &game.requires);
+    }
     trace!(&game.arm);
     game.dump();
 }
 
-// {{{
+// @num/random {{{
+/// Random Number - Xor-Shift Algorithm
+#[derive(Debug, Clone)]
+pub struct XorShift(u64);
+impl XorShift {
+    pub fn new() -> Self {
+        XorShift(88_172_645_463_325_252)
+    }
+    fn next(&mut self) -> u64 {
+        let mut x = self.0;
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        self.0 = x;
+        x
+    }
+    pub fn gen<T: FromU64>(&mut self) -> T {
+        T::coerce(self.next())
+    }
+    pub fn shuffle<T>(&mut self, xs: &mut Vec<T>) {
+        for i in (1..xs.len()).rev() {
+            let j = self.gen::<usize>() % (i + 1);
+            if i != j {
+                xs.swap(i, j);
+            }
+        }
+    }
+}
+
+// @num/random/fromu64
+/// Number - Utility - FromU64
+pub trait FromU64 {
+    fn coerce(x: u64) -> Self;
+}
+impl FromU64 for u64 {
+    fn coerce(x: u64) -> Self {
+        x
+    }
+}
+macro_rules! define_fromu64 {
+    ($ty:ty) => {
+        impl FromU64 for $ty {
+            fn coerce(x: u64) -> Self {
+                x as $ty
+            }
+        }
+    };
+}
+define_fromu64!(usize);
+define_fromu64!(u32);
+define_fromu64!(u128);
+define_fromu64!(i32);
+define_fromu64!(i64);
+define_fromu64!(i128);
+impl FromU64 for bool {
+    fn coerce(x: u64) -> Self {
+        x % 2 == 0
+    }
+}
+impl FromU64 for f32 {
+    fn coerce(x: u64) -> Self {
+        (x as f32) / (std::u64::MAX as f32)
+    }
+}
+impl FromU64 for f64 {
+    fn coerce(x: u64) -> Self {
+        (x as f64) / (std::u64::MAX as f64)
+    }
+}
+// }}}
+// {{{ base
 use std::io::{self, Write};
 use std::str::FromStr;
 #[derive(Default)]
