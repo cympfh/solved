@@ -71,14 +71,21 @@ pub struct Game {
 }
 
 impl Game {
-    fn new(n: i64, v: usize, balls: BTreeSet<(i64, i64)>, requires: BTreeSet<(i64, i64)>) -> Self {
-        let (arm, initial_commands) = CrossArm::new(v - 1);
-        trace!(&arm);
-        trace!(&initial_commands);
+    fn empty() -> Self {
+        Game::new(1, 1, BTreeSet::new(), BTreeSet::new(), 0)
+    }
+    fn new(
+        n: usize,
+        v: usize,
+        balls: BTreeSet<(i64, i64)>,
+        requires: BTreeSet<(i64, i64)>,
+        scale: usize,
+    ) -> Self {
+        let (arm, initial_commands) = CrossArm::new(v - 1, scale);
         let initial_arm = arm.clone();
         let initial_time = initial_commands.len();
         Self {
-            n,
+            n: n as i64,
             balls,
             requires,
             arm,
@@ -92,6 +99,12 @@ impl Game {
     }
     fn end(&self) -> bool {
         self.abort || self.requires.is_empty()
+    }
+    fn succsess(&self) -> bool {
+        self.balls.is_empty() && self.requires.is_empty()
+    }
+    fn score(&self) -> usize {
+        self.operations.len()
     }
     fn dump(&self) {
         println!("{}", self.initial_arm.v + 1);
@@ -141,7 +154,8 @@ impl Game {
     }
     /// 実行計画を決めて実行する
     fn run(&mut self) {
-        if self.time > 100000 {
+        // 無限ループで失敗だと判断
+        if self.time > 3777 {
             self.abort = true;
         }
         use Direction::*;
@@ -161,7 +175,7 @@ impl Game {
         #[cfg(debug_assertions)]
         {
             // DEBUG
-            const BREAKPOINT: usize = 1000;
+            const BREAKPOINT: usize = 2000;
             if self.time + 5 > BREAKPOINT {
                 eprintln!("\x1b[41mtime\x1b[0m {}", self.time);
                 trace!(self.mode);
@@ -293,18 +307,23 @@ pub struct CrossArm {
 }
 
 impl CrossArm {
-    //      4
-    //      |
-    // 3 -- 0 -- 1
-    //      |
-    //      2
-    fn new(v: usize) -> (Self, Vec<Operation>) {
+    /// 十字型のアームを構築する
+    ///
+    ///      4
+    ///      |
+    /// 3 -- 0 -- 1
+    ///      |
+    ///      2
+    ///
+    /// * `v` - 根っこ (0) を除く頂点数
+    /// * `scale` - アームの長さ (0以上)
+    fn new(v: usize, scale: usize) -> (Self, Vec<Operation>) {
         use Direction::*;
         let mut tree = vec![];
         let mut leaves = vec![];
         for i in 0..v {
             let group_id = i / 4;
-            let len = group_id + 1;
+            let len = group_id + 1 + scale;
             let mut pos = (0_i64, len as i64);
             for _ in 0..i % 4 {
                 pos = rot90(pos);
@@ -452,19 +471,53 @@ fn main() {
         }
     }
 
-    let mut game = Game::new(n as i64, v, balls, requires);
-    while !game.end() {
-        game.run();
-    }
-    if game.balls.is_empty() && game.requires.is_empty() {
-        eprintln!("\x1b[32mSUCCESS\x1b[0m");
-        eprintln!("\x1b[42mscore\x1b[0m {}", game.operations.len());
+    let mut scale = 0;
+    let mut best_score = 999_999_999_999;
+    let mut best_game = Game::empty();
+    loop_timeout_ms!(2500; {
+        let mut game = Game::new(n, v, balls.clone(), requires.clone(), scale);
+        while !game.end() {
+            game.run();
+        }
+        if game.succsess() {
+            if game.score() < best_score {
+                best_score = game.score();
+                best_game = game.clone();
+                eprintln!("\x1b[42mscore update\x1b[0m {}", best_score);
+            }
+        } else {
+            break;
+        }
+        scale += 1;
+    });
+    if best_score < 999_999_999_999 {
+        eprintln!("\x1b[42mscore\x1b[0m {}", best_score);
     } else {
-        eprintln!("\x1b[31mABORT\x1b[0m");
-        trace!(&game.balls, &game.requires);
+        eprintln!("\x1b[31mFailed\x1b[0m");
     }
-    trace!(&game.arm);
-    game.dump();
+    best_game.dump();
+}
+
+// @datetime/timed_loop
+/// Time Limited Loop
+#[macro_export]
+macro_rules! loop_timeout_ms {
+    ( $milli_seconds:expr; $body:expr ) => {
+        let now = std::time::SystemTime::now();
+        loop {
+            match now.elapsed() {
+                Ok(elapsed) => {
+                    if elapsed.as_millis() > $milli_seconds {
+                        break;
+                    }
+                    $body
+                }
+                Err(e) => {
+                    eprintln!("Err, {:?}", e);
+                }
+            }
+        }
+    };
 }
 
 // @num/random {{{
