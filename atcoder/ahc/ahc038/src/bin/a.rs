@@ -219,13 +219,14 @@ impl Game {
         {
             for i in 0..arm.v {
                 let pos = arm.leave_pos(i);
-                if !arm.has[i] && self.balls.contains(&pos) {
+                if !arm.has[i] && self.balls.contains(&pos) && !rm_balls.contains(&pos) {
                     score += 100;
                     tako[i + 1] = true;
                     arm.num_tako += 1;
                     arm.has[i] = true;
                     rm_balls.insert(pos);
-                } else if arm.has[i] && self.requires.contains(&pos) {
+                } else if arm.has[i] && self.requires.contains(&pos) && !rm_requires.contains(&pos)
+                {
                     score += 100;
                     tako[i + 1] = true;
                     arm.num_tako -= 1;
