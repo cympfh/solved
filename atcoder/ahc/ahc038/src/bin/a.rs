@@ -71,17 +71,14 @@ pub struct Game {
 }
 
 impl Game {
-    fn empty() -> Self {
-        Game::new(1, 1, BTreeSet::new(), BTreeSet::new(), 0)
-    }
     fn new(
         n: usize,
         v: usize,
         balls: BTreeSet<(i64, i64)>,
         requires: BTreeSet<(i64, i64)>,
-        scale: usize,
+        param: ArmParameter,
     ) -> Self {
-        let (arm, initial_commands) = CrossArm::new(v - 1, scale);
+        let (arm, initial_commands) = CrossArm::new(v - 1, param);
         let initial_arm = arm.clone();
         let initial_time = initial_commands.len();
         Self {
@@ -298,6 +295,18 @@ fn rot90(x: (i64, i64)) -> (i64, i64) {
 }
 
 #[derive(Debug, Clone)]
+pub struct ArmParameter {
+    scale: usize,
+    center: (i64, i64),
+}
+
+impl ArmParameter {
+    fn new(scale: usize, center: (i64, i64)) -> Self {
+        Self { scale, center }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct CrossArm {
     center: (i64, i64),
     v: usize,                  // 葉っぱの数 (center は除く)
@@ -318,13 +327,13 @@ impl CrossArm {
     ///
     /// * `v` - 根っこ (0) を除く頂点数
     /// * `scale` - アームの長さ (0以上)
-    fn new(v: usize, scale: usize) -> (Self, Vec<Operation>) {
+    fn new(v: usize, param: ArmParameter) -> (Self, Vec<Operation>) {
         use Direction::*;
         let mut tree = vec![];
         let mut leaves = vec![];
         for i in 0..v {
             let group_id = i / 4;
-            let len = group_id + 1 + scale;
+            let len = group_id + 1 + param.scale;
             let mut pos = (0_i64, len as i64);
             for _ in 0..i % 4 {
                 pos = rot90(pos);
@@ -332,10 +341,9 @@ impl CrossArm {
             tree.push((0, len));
             leaves.push(pos);
         }
-
         let has = vec![false; v];
         let arm = Self {
-            center: (1, 1),
+            center: param.center,
             v,
             tree,
             leaves,
@@ -472,31 +480,43 @@ fn main() {
         }
     }
 
-    let mut scale = 0;
-    let mut best_score = 999_999_999_999;
-    let mut best_game = Game::empty();
+    let mut params = vec![];
+    for scale in 1..n / 2 {
+        let half = (n / 2) as i64;
+        let fuchi = (n - 1) as i64;
+        params.push(ArmParameter::new(scale, (half, half)));
+        params.push(ArmParameter::new(scale, (half, fuchi)));
+        params.push(ArmParameter::new(scale, (fuchi, half)));
+    }
+    params.reverse();
+
+    let mut best_score = None;
+    let mut best_game = None;
     loop_timeout_ms!(2500; {
-        let mut game = Game::new(n, v, balls.clone(), requires.clone(), scale);
-        while !game.end() {
-            game.run();
-        }
-        if game.succsess() {
-            if game.score() < best_score {
-                best_score = game.score();
-                best_game = game.clone();
-                eprintln!("\x1b[42mscore update\x1b[0m {}", best_score);
+        if let Some(param) = params.pop() {
+            let mut game = Game::new(n, v, balls.clone(), requires.clone(), param);
+            while !game.end() {
+                game.run();
+            }
+            if game.succsess() {
+                if best_score.is_none() || Some(game.score()) < best_score {
+                    best_score = Some(game.score());
+                    best_game = Some(game);
+                    eprintln!("\x1b[42mscore update\x1b[0m {}", best_score.unwrap());
+                }
+            } else {
+                break;
             }
         } else {
             break;
         }
-        scale += 1;
     });
-    if best_score < 999_999_999_999 {
-        eprintln!("\x1b[42mscore\x1b[0m {}", best_score);
+    if let Some(score) = best_score {
+        eprintln!("\x1b[42mscore\x1b[0m {}", score);
+        best_game.unwrap().dump();
     } else {
         eprintln!("\x1b[31mFailed\x1b[0m");
     }
-    best_game.dump();
 }
 
 // @datetime/timed_loop
