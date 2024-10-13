@@ -696,22 +696,17 @@ fn main() {
         }
     }
 
-    // 調べるアームの形状を列挙する
-    // 先頭から順に時間が許す限り試す
-    let mut space: BinaryHeap<(Reverse<usize>, ArmConfig)> = BinaryHeap::new(); // (期待されるscore, Arm)
-    let half = (n / 2) as i64;
+    // アーム設定に関する探索空間
+    // (期待するスコア, 世代, ArmConfig)
+    let mut space: BinaryHeap<(Reverse<usize>, usize, ArmConfig)> = BinaryHeap::new();
     {
+        let half = (n / 2) as i64;
         let mut scale = 1;
         while scale <= n / 2 {
-            for atype in [
-                ArmType::Cross,
-                ArmType::T,
-                ArmType::I,
-                ArmType::L,
-                ArmType::OneHand,
-            ] {
+            for atype in [ArmType::Cross, ArmType::T, ArmType::L, ArmType::OneHand] {
                 space.push((
                     Reverse(n - scale),
+                    0,
                     ArmConfig::new(atype, v - 1, scale, (half, half)),
                 ));
             }
@@ -722,8 +717,8 @@ fn main() {
     let mut rand = XorShift::new();
     let mut best_score = None;
     let mut best_game = None;
-    loop_timeout_ms!(2500; {
-        if let Some((_, conf)) = space.pop() {
+    loop_timeout_ms!(2700; {
+        if let Some((_, gen, conf)) = space.pop() {
             let arm = Arm::from(&conf);
             let mut game = Game::new(n, balls.clone(), requires.clone(), arm);
             while !game.end() {
@@ -743,13 +738,13 @@ fn main() {
                 {
                     // 次の探索アーム
                     if conf.scale < n / 2 {
-                        space.push((Reverse(score), ArmConfig::new(conf.atype, conf.v, conf.scale + 1, conf.center)));
+                        space.push((Reverse(score), 0, ArmConfig::new(conf.atype, conf.v, conf.scale + 1, conf.center)));
                     }
-                    // 初期値の探索: はあんまり効果が薄いし時間が無駄
-                    if conf.center == (half, half) {
+                    // 初期値の探索
+                    if gen < 3 {
                         let x = rand.gen::<usize>() % n;
                         let y = rand.gen::<usize>() % n;
-                        space.push((Reverse(score), ArmConfig::new(conf.atype, conf.v, conf.scale, (x as i64, y as i64))));
+                        space.push((Reverse(score), gen + 1, ArmConfig::new(conf.atype, conf.v, conf.scale, (x as i64, y as i64))));
                     }
                 }
             } else {
