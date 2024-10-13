@@ -56,9 +56,9 @@ pub struct Game {
     /// たこ焼きを置くべき座標, まだ置かれていない
     requires: BTreeSet<(i64, i64)>,
     /// アーム
-    arm: CrossArm,
+    arm: Arm,
     /// 初期状態のコピー
-    initial_arm: CrossArm,
+    initial_arm: Arm,
     /// 操作列
     operations: Vec<Operation>,
     /// 実行計画
@@ -73,12 +73,11 @@ pub struct Game {
 impl Game {
     fn new(
         n: usize,
-        v: usize,
         balls: BTreeSet<(i64, i64)>,
         requires: BTreeSet<(i64, i64)>,
-        param: ArmParameter,
+        arm: Arm,
     ) -> Self {
-        let (arm, initial_commands) = CrossArm::new(v - 1, param);
+        let initial_commands = arm.initial_commands.clone();
         let initial_arm = arm.clone();
         let initial_time = initial_commands.len();
         Self {
@@ -295,28 +294,18 @@ fn rot90(x: (i64, i64)) -> (i64, i64) {
 }
 
 #[derive(Debug, Clone)]
-pub struct ArmParameter {
-    scale: usize,
-    center: (i64, i64),
-}
-
-impl ArmParameter {
-    fn new(scale: usize, center: (i64, i64)) -> Self {
-        Self { scale, center }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct CrossArm {
+pub struct Arm {
+    name: String,
     center: (i64, i64),
     v: usize,                  // 葉っぱの数 (center は除く)
     tree: Vec<(usize, usize)>, // tree[i] = 葉っぱ i の (parent, length)
     leaves: Vec<(i64, i64)>,   // leaves[i] = 葉っぱ i の center から見た相対座標
-    has: Vec<bool>,            // has[i] = 葉っぱ i がたこ焼きを確保してるか
-    num_tako: usize,           // 確保してるたこ焼きの総数
+    initial_commands: Vec<Operation>,
+    has: Vec<bool>,  // has[i] = 葉っぱ i がたこ焼きを確保してるか
+    num_tako: usize, // 確保してるたこ焼きの総数
 }
 
-impl CrossArm {
+impl Arm {
     /// 十字型のアームを構築する
     ///
     ///      4
@@ -327,13 +316,13 @@ impl CrossArm {
     ///
     /// * `v` - 根っこ (0) を除く頂点数
     /// * `scale` - アームの長さ (0以上)
-    fn new(v: usize, param: ArmParameter) -> (Self, Vec<Operation>) {
+    fn crossarm(name: String, v: usize, scale: usize, center: (i64, i64)) -> Self {
         use Direction::*;
         let mut tree = vec![];
         let mut leaves = vec![];
         for i in 0..v {
             let group_id = i / 4;
-            let len = group_id + 1 + param.scale;
+            let len = group_id + 1 + scale;
             let mut pos = (0_i64, len as i64);
             for _ in 0..i % 4 {
                 pos = rot90(pos);
@@ -342,15 +331,7 @@ impl CrossArm {
             leaves.push(pos);
         }
         let has = vec![false; v];
-        let arm = Self {
-            center: param.center,
-            v,
-            tree,
-            leaves,
-            has,
-            num_tako: 0,
-        };
-        let mut command = vec![];
+        let mut initial_commands = vec![];
         {
             let mut rot = vec![Nop; v];
             let tako = vec![false; v + 1];
@@ -361,7 +342,7 @@ impl CrossArm {
                     _ => Nop,
                 };
             }
-            command.push(Operation {
+            initial_commands.push(Operation {
                 mov: Nop,
                 rot: rot.clone(),
                 tako: tako.clone(),
@@ -372,13 +353,174 @@ impl CrossArm {
                     _ => Nop,
                 };
             }
-            command.push(Operation {
+            initial_commands.push(Operation {
                 mov: Nop,
                 rot,
                 tako,
             });
         };
-        (arm, command)
+        Self {
+            name,
+            center,
+            v,
+            tree,
+            initial_commands,
+            leaves,
+            has,
+            num_tako: 0,
+        }
+    }
+    /// I字型のアームを構築する
+    ///
+    /// 2 -- 0 -- 1
+    ///
+    /// * `v` - 根っこ (0) を除く頂点数
+    /// * `scale` - アームの長さ (0以上)
+    fn iarm(name: String, v: usize, scale: usize, center: (i64, i64)) -> Self {
+        use Direction::*;
+        let mut tree = vec![];
+        let mut leaves = vec![];
+        for i in 0..v {
+            let group_id = i / 2;
+            let len = group_id + 1 + scale;
+            let mut pos = (0_i64, len as i64);
+            if i % 2 == 1 {
+                pos = rot90(rot90(pos));
+            }
+            tree.push((0, len));
+            leaves.push(pos);
+        }
+        let has = vec![false; v];
+        let mut initial_commands = vec![];
+        {
+            let mut rot = vec![Nop; v];
+            let tako = vec![false; v + 1];
+            for i in 0..v {
+                rot[i] = if i % 2 == 0 { Nop } else { R };
+            }
+            initial_commands.push(Operation {
+                mov: Nop,
+                rot: rot.clone(),
+                tako: tako.clone(),
+            });
+            initial_commands.push(Operation {
+                mov: Nop,
+                rot,
+                tako,
+            });
+        };
+        Self {
+            name,
+            center,
+            v,
+            tree,
+            initial_commands,
+            leaves,
+            has,
+            num_tako: 0,
+        }
+    }
+    /// L字型のアームを構築する
+    ///
+    ///      0 -- 1
+    ///      |
+    ///      2
+    ///
+    /// * `v` - 根っこ (0) を除く頂点数
+    /// * `scale` - アームの長さ (0以上)
+    fn larm(name: String, v: usize, scale: usize, center: (i64, i64)) -> Self {
+        use Direction::*;
+        let mut tree = vec![];
+        let mut leaves = vec![];
+        for i in 0..v {
+            let group_id = i / 2;
+            let len = group_id + 1 + scale;
+            let mut pos = (0_i64, len as i64);
+            if i % 2 == 1 {
+                pos = rot90(pos);
+            }
+            tree.push((0, len));
+            leaves.push(pos);
+        }
+        let has = vec![false; v];
+        let mut initial_commands = vec![];
+        {
+            let mut rot = vec![Nop; v];
+            let tako = vec![false; v + 1];
+            for i in 0..v {
+                rot[i] = if i % 2 == 0 { Nop } else { R };
+            }
+            initial_commands.push(Operation {
+                mov: Nop,
+                rot: rot.clone(),
+                tako: tako.clone(),
+            });
+        };
+        Self {
+            name,
+            center,
+            v,
+            tree,
+            initial_commands,
+            leaves,
+            has,
+            num_tako: 0,
+        }
+    }
+    /// T字型のアームを構築する
+    ///
+    /// 3 -- 0 -- 1
+    ///      |
+    ///      2
+    ///
+    /// * `v` - 根っこ (0) を除く頂点数
+    /// * `scale` - アームの長さ (0以上)
+    fn tarm(name: String, v: usize, scale: usize, center: (i64, i64)) -> Self {
+        use Direction::*;
+        let mut tree = vec![];
+        let mut leaves = vec![];
+        for i in 0..v {
+            let group_id = i / 3;
+            let len = group_id + 1 + scale;
+            let mut pos = (0_i64, len as i64);
+            for _ in 0..i % 3 {
+                pos = rot90(pos);
+            }
+            tree.push((0, len));
+            leaves.push(pos);
+        }
+        let has = vec![false; v];
+        let mut initial_commands = vec![];
+        {
+            let mut rot = vec![Nop; v];
+            let tako = vec![false; v + 1];
+            for i in 0..v {
+                rot[i] = if i % 3 == 0 { Nop } else { R };
+            }
+            initial_commands.push(Operation {
+                mov: Nop,
+                rot: rot.clone(),
+                tako: tako.clone(),
+            });
+            for i in 0..v {
+                rot[i] = if i % 3 != 2 { Nop } else { R };
+            }
+            initial_commands.push(Operation {
+                mov: Nop,
+                rot: rot.clone(),
+                tako: tako.clone(),
+            });
+        };
+        Self {
+            name,
+            center,
+            v,
+            tree,
+            initial_commands,
+            leaves,
+            has,
+            num_tako: 0,
+        }
     }
     fn is_full(&self) -> bool {
         self.num_tako == self.v
@@ -395,7 +537,7 @@ impl CrossArm {
 }
 
 /// 全体の平行移動
-impl std::ops::AddAssign<Direction> for CrossArm {
+impl std::ops::AddAssign<Direction> for Arm {
     fn add_assign(&mut self, d: Direction) {
         use Direction::*;
         let (dx, dy) = match d {
@@ -408,8 +550,8 @@ impl std::ops::AddAssign<Direction> for CrossArm {
         self.center = (self.center.0 + dx, self.center.1 + dy);
     }
 }
-impl std::ops::Add<Direction> for &CrossArm {
-    type Output = CrossArm;
+impl std::ops::Add<Direction> for &Arm {
+    type Output = Arm;
     fn add(self, d: Direction) -> Self::Output {
         let mut r = self.clone();
         r += d;
@@ -418,7 +560,7 @@ impl std::ops::Add<Direction> for &CrossArm {
 }
 
 /// 全体の回転
-impl std::ops::MulAssign<Direction> for CrossArm {
+impl std::ops::MulAssign<Direction> for Arm {
     fn mul_assign(&mut self, d: Direction) {
         use Direction::*;
         for i in 0..self.v {
@@ -432,8 +574,8 @@ impl std::ops::MulAssign<Direction> for CrossArm {
         }
     }
 }
-impl std::ops::Mul<Direction> for &CrossArm {
-    type Output = CrossArm;
+impl std::ops::Mul<Direction> for &Arm {
+    type Output = Arm;
     fn mul(self, d: Direction) -> Self::Output {
         let mut r = self.clone();
         r *= d;
@@ -480,31 +622,44 @@ fn main() {
         }
     }
 
-    let mut params = vec![];
+    // 調べるアームの形状を列挙する
+    // 先頭から順に時間が許す限り試す
+    let mut arms = vec![];
     for scale in 1..n / 2 {
         let half = (n / 2) as i64;
         let fuchi = (n - 1) as i64;
-        params.push(ArmParameter::new(scale, (half, half)));
-        params.push(ArmParameter::new(scale, (half, fuchi)));
-        params.push(ArmParameter::new(scale, (fuchi, half)));
+        arms.push(Arm::iarm(format!("I"), v - 1, scale, (half, half)));
+        arms.push(Arm::larm(format!("L"), v - 1, scale, (half, half)));
+        arms.push(Arm::tarm(format!("T"), v - 1, scale, (half, half)));
+        arms.push(Arm::crossarm(format!("cross"), v - 1, scale, (half, half)));
+        arms.push(Arm::crossarm(format!("cross"), v - 1, scale, (half, fuchi)));
+        arms.push(Arm::crossarm(format!("cross"), v - 1, scale, (fuchi, half)));
     }
-    params.reverse();
+    arms.reverse();
 
     let mut best_score = None;
     let mut best_game = None;
     loop_timeout_ms!(2500; {
-        if let Some(param) = params.pop() {
-            let mut game = Game::new(n, v, balls.clone(), requires.clone(), param);
+        if let Some(arm) = arms.pop() {
+            let mut game = Game::new(n, balls.clone(), requires.clone(), arm);
             while !game.end() {
                 game.run();
             }
             if game.succsess() {
-                if best_score.is_none() || Some(game.score()) < best_score {
-                    best_score = Some(game.score());
+                let _armname = game.arm.name.clone();
+                let score = game.score();
+                if best_score.is_none() || Some(score) < best_score {
+                    best_score = Some(score);
                     best_game = Some(game);
-                    eprintln!("\x1b[42mscore update\x1b[0m {}", best_score.unwrap());
+                    #[cfg(debug_assertions)]
+                    eprintln!("{} => {}; \x1b[42mupdate\x1b[0m", _armname, score);
+                } else {
+                    #[cfg(debug_assertions)]
+                    eprintln!("{} => {}", _armname, score);
                 }
             } else {
+                #[cfg(debug_assertions)]
+                eprintln!("{} => ><", game.arm.name);
                 break;
             }
         } else {
