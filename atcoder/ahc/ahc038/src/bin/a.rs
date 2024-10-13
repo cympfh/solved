@@ -1,7 +1,7 @@
 #![allow(unused_imports, unused_macros, dead_code)]
 use std::{cmp::*, collections::*};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 enum Direction {
     R,
     D,
@@ -293,6 +293,33 @@ fn rot90(x: (i64, i64)) -> (i64, i64) {
     (x.1, -x.0)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ArmType {
+    Cross,
+    I,
+    L,
+    T,
+    OneHand,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ArmConfig {
+    atype: ArmType,
+    v: usize,
+    scale: usize,
+    center: (i64, i64),
+}
+impl ArmConfig {
+    pub fn new(atype: ArmType, v: usize, scale: usize, center: (i64, i64)) -> Self {
+        Self {
+            atype,
+            v,
+            scale,
+            center,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Arm {
     name: String,
@@ -306,6 +333,23 @@ pub struct Arm {
 }
 
 impl Arm {
+    fn from(conf: &ArmConfig) -> Self {
+        let label = match conf.atype {
+            ArmType::Cross => "+",
+            ArmType::T => "T",
+            ArmType::I => "I",
+            ArmType::L => "L",
+            ArmType::OneHand => "1",
+        };
+        let name = format!("{}({}; {:?})", label, conf.scale, conf.center);
+        match conf.atype {
+            ArmType::Cross => Self::crossarm(name, conf.v, conf.scale, conf.center),
+            ArmType::T => Self::tarm(name, conf.v, conf.scale, conf.center),
+            ArmType::I => Self::iarm(name, conf.v, conf.scale, conf.center),
+            ArmType::L => Self::larm(name, conf.v, conf.scale, conf.center),
+            ArmType::OneHand => Self::onehand_arm(name, conf.v, conf.scale, conf.center),
+        }
+    }
     /// 十字型のアームを構築する
     ///
     ///      4
@@ -522,6 +566,36 @@ impl Arm {
             num_tako: 0,
         }
     }
+    /// 片手字型のアームを構築する
+    ///
+    ///      0 -- 1
+    ///
+    /// * `v` - 根っこ (0) を除く頂点数
+    /// * `scale` - アームの長さ (0以上)
+    fn onehand_arm(name: String, v: usize, scale: usize, center: (i64, i64)) -> Self {
+        use Direction::*;
+        let mut tree = vec![];
+        let mut leaves = vec![];
+        for i in 0..v {
+            let group_id = i / 2;
+            let len = group_id + 1 + scale;
+            let pos = (0_i64, len as i64);
+            tree.push((0, len));
+            leaves.push(pos);
+        }
+        let has = vec![false; v];
+        let initial_commands = vec![];
+        Self {
+            name,
+            center,
+            v,
+            tree,
+            initial_commands,
+            leaves,
+            has,
+            num_tako: 0,
+        }
+    }
     fn is_full(&self) -> bool {
         self.num_tako == self.v
     }
@@ -624,45 +698,67 @@ fn main() {
 
     // 調べるアームの形状を列挙する
     // 先頭から順に時間が許す限り試す
-    let mut arms = vec![];
-    for scale in 1..n / 2 {
-        let half = (n / 2) as i64;
-        let fuchi = (n - 1) as i64;
-        arms.push(Arm::iarm(format!("I"), v - 1, scale, (half, half)));
-        arms.push(Arm::larm(format!("L"), v - 1, scale, (half, half)));
-        arms.push(Arm::tarm(format!("T"), v - 1, scale, (half, half)));
-        arms.push(Arm::crossarm(format!("cross"), v - 1, scale, (half, half)));
-        arms.push(Arm::crossarm(format!("cross"), v - 1, scale, (half, fuchi)));
-        arms.push(Arm::crossarm(format!("cross"), v - 1, scale, (fuchi, half)));
+    let mut space: BinaryHeap<(Reverse<usize>, ArmConfig)> = BinaryHeap::new(); // (期待されるscore, Arm)
+    let half = (n / 2) as i64;
+    {
+        let mut scale = 1;
+        while scale <= n / 2 {
+            for atype in [
+                ArmType::Cross,
+                ArmType::T,
+                ArmType::I,
+                ArmType::L,
+                ArmType::OneHand,
+            ] {
+                space.push((
+                    Reverse(n - scale),
+                    ArmConfig::new(atype, v - 1, scale, (half, half)),
+                ));
+            }
+            scale *= 2;
+        }
     }
-    arms.reverse();
 
+    let mut rand = XorShift::new();
     let mut best_score = None;
     let mut best_game = None;
     loop_timeout_ms!(2500; {
-        if let Some(arm) = arms.pop() {
+        if let Some((_, conf)) = space.pop() {
+            let arm = Arm::from(&conf);
             let mut game = Game::new(n, balls.clone(), requires.clone(), arm);
             while !game.end() {
                 game.run();
             }
             if game.succsess() {
-                let _armname = game.arm.name.clone();
                 let score = game.score();
-                if best_score.is_none() || Some(score) < best_score {
-                    best_score = Some(score);
-                    best_game = Some(game);
+                if best_score.is_none() || Some(game.score()) < best_score {
                     #[cfg(debug_assertions)]
-                    eprintln!("{} => {}; \x1b[42mupdate\x1b[0m", _armname, score);
+                    eprintln!("{} => {}; \x1b[42mupdate\x1b[0m", game.arm.name, game.score());
+                    best_score = Some(game.score());
+                    best_game = Some(game);
                 } else {
                     #[cfg(debug_assertions)]
-                    eprintln!("{} => {}", _armname, score);
+                    eprintln!("{} => {}", game.arm.name, game.score());
+                }
+                {
+                    // 次の探索アーム
+                    if conf.scale < n / 2 {
+                        space.push((Reverse(score), ArmConfig::new(conf.atype, conf.v, conf.scale + 1, conf.center)));
+                    }
+                    // 初期値の探索: はあんまり効果が薄いし時間が無駄
+                    if conf.center == (half, half) {
+                        let x = rand.gen::<usize>() % n;
+                        let y = rand.gen::<usize>() % n;
+                        space.push((Reverse(score), ArmConfig::new(conf.atype, conf.v, conf.scale, (x as i64, y as i64))));
+                    }
                 }
             } else {
                 #[cfg(debug_assertions)]
                 eprintln!("{} => ><", game.arm.name);
-                break;
             }
         } else {
+            #[cfg(debug_assertions)]
+            eprintln!("No space");
             break;
         }
     });
@@ -674,8 +770,7 @@ fn main() {
     }
 }
 
-// @datetime/timed_loop
-/// Time Limited Loop
+// {{{ @datetime/timed_loop - Time Limited Loop
 #[macro_export]
 macro_rules! loop_timeout_ms {
     ( $milli_seconds:expr; $body:expr ) => {
@@ -695,7 +790,7 @@ macro_rules! loop_timeout_ms {
         }
     };
 }
-
+// }}}
 // @num/random {{{
 /// Random Number - Xor-Shift Algorithm
 #[derive(Debug, Clone)]
