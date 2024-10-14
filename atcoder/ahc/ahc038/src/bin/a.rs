@@ -63,8 +63,6 @@ pub struct Game {
     operations: Vec<Operation>,
     /// 実行計画
     mode: Mode,
-    /// random generator
-    rand: XorShift,
     /// for DEBUG
     abort: bool,
     time: usize,
@@ -88,7 +86,6 @@ impl Game {
             initial_arm,
             operations: initial_commands,
             mode: Mode::Get,
-            rand: XorShift::new(),
             abort: false,
             time: initial_time,
         }
@@ -157,7 +154,7 @@ impl Game {
     /// 実行計画を決めて実行する
     fn run(&mut self) {
         // 無限ループで失敗だと判断
-        if self.time > 3777 {
+        if self.time > 2333 {
             self.abort = true;
         }
         use Direction::*;
@@ -178,10 +175,6 @@ impl Game {
             }
         }
         cands.sort_by_key(|(score, op, _): &(i64, Operation, _)| (-score, op.mov));
-        // 沼ってるときにランダムに抜け出すことを期待する
-        if self.time > 1000 && (self.time % 200) < 10 {
-            self.rand.shuffle(&mut cands);
-        }
         #[cfg(debug_assertions)]
         {
             // DEBUG
@@ -936,18 +929,39 @@ fn main() {
     let mut rand = XorShift::new();
     let mut best_score = None;
     let mut best_game = None;
-    loop_timeout_ms!(2700; {
+    let now = std::time::SystemTime::now();
+    let mut aborting = false; // もうすぐタイムアウト
+    loop {
+        if let Ok(time) = now.elapsed() {
+            if time.as_millis() > 2800 {
+                break;
+            } else if time.as_millis() > 2300 {
+                aborting = true;
+            }
+        }
         if let Some((_, gen, conf)) = space.pop() {
             let arm = Arm::from(&conf);
             let mut game = Game::new(n, balls.clone(), requires.clone(), arm);
             while !game.end() {
+                if aborting && game.time % 20 == 0 {
+                    if let Ok(time) = now.elapsed() {
+                        if time.as_millis() > 2900 {
+                            game.abort = true;
+                            break;
+                        }
+                    }
+                }
                 game.run();
             }
             if game.succsess() {
                 let score = game.score();
                 if best_score.is_none() || Some(game.score()) < best_score {
                     #[cfg(debug_assertions)]
-                    eprintln!("{} => {}; \x1b[42mupdate\x1b[0m", game.arm.name, game.score());
+                    eprintln!(
+                        "{} => {}; \x1b[42mupdate\x1b[0m",
+                        game.arm.name,
+                        game.score()
+                    );
                     best_score = Some(game.score());
                     best_game = Some(game);
                 } else {
@@ -957,13 +971,21 @@ fn main() {
                 {
                     // 次の探索アーム
                     if conf.scale < n / 2 {
-                        space.push((Reverse(score), 0, ArmConfig::new(conf.atype, conf.v, conf.scale + 1, conf.center)));
+                        space.push((
+                            Reverse(score),
+                            0,
+                            ArmConfig::new(conf.atype, conf.v, conf.scale + 1, conf.center),
+                        ));
                     }
                     // 初期値の探索
                     if gen < 3 {
                         let x = rand.gen::<usize>() % n;
                         let y = rand.gen::<usize>() % n;
-                        space.push((Reverse(score), gen + 1, ArmConfig::new(conf.atype, conf.v, conf.scale, (x as i64, y as i64))));
+                        space.push((
+                            Reverse(score),
+                            gen + 1,
+                            ArmConfig::new(conf.atype, conf.v, conf.scale, (x as i64, y as i64)),
+                        ));
                     }
                 }
             } else {
@@ -975,7 +997,7 @@ fn main() {
             eprintln!("No space");
             break;
         }
-    });
+    }
     if let Some(score) = best_score {
         eprintln!("\x1b[42mscore\x1b[0m {}", score);
         // eprintln!("{}", &best_game.clone().unwrap().arm.name);
@@ -985,27 +1007,6 @@ fn main() {
     }
 }
 
-// {{{ @datetime/timed_loop - Time Limited Loop
-#[macro_export]
-macro_rules! loop_timeout_ms {
-    ( $milli_seconds:expr; $body:expr ) => {
-        let now = std::time::SystemTime::now();
-        loop {
-            match now.elapsed() {
-                Ok(elapsed) => {
-                    if elapsed.as_millis() > $milli_seconds {
-                        break;
-                    }
-                    $body
-                }
-                Err(e) => {
-                    eprintln!("Err, {:?}", e);
-                }
-            }
-        }
-    };
-}
-// }}}
 // @num/random {{{
 /// Random Number - Xor-Shift Algorithm
 #[derive(Debug, Clone)]
