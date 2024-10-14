@@ -917,8 +917,8 @@ fn main() {
         let mut scale = 1;
         while scale <= n / 2 {
             for atype in [
-                ArmType::Cross,
-                ArmType::T,
+                // ArmType::Cross,
+                // ArmType::T,
                 ArmType::L,
                 ArmType::LCross,
                 ArmType::LL,
