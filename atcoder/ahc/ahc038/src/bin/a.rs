@@ -128,7 +128,13 @@ impl Game {
         self.operations.push(op.clone());
         self.time += 1;
         self.arm += op.mov; // 平行移動
-        self.arm *= op.rot[0]; // 回転, TODO(全体の回転しか想定してない)
+        {
+            // 回転
+            self.arm *= op.rot[0]; // 全体の回転
+            for child in self.arm.children.iter_mut() {
+                *child *= op.rot[2];
+            }
+        }
         {
             // get/set
             for i in 0..self.arm.v {
@@ -158,8 +164,16 @@ impl Game {
         let mut cands = vec![];
         for d in [U, D, L, R, Nop] {
             for rot in [L, R, Nop] {
-                if let Some(c) = self.goodness(d, rot) {
-                    cands.push(c);
+                if self.arm.children.is_empty() {
+                    if let Some(c) = self.goodness(d, rot, rot) {
+                        cands.push(c);
+                    }
+                } else {
+                    for rot2 in [L, R, Nop] {
+                        if let Some(c) = self.goodness(d, rot, rot2) {
+                            cands.push(c);
+                        }
+                    }
                 }
             }
         }
@@ -175,10 +189,10 @@ impl Game {
             if self.time + 5 > BREAKPOINT {
                 eprintln!("\x1b[41mtime\x1b[0m {}", self.time);
                 trace!(self.mode);
-                trace!(&self.arm);
-                for c in cands.iter() {
-                    trace!(c);
-                }
+                // trace!(&self.arm);
+                // for c in cands.iter() {
+                //     trace!(c);
+                // }
             }
             if self.time >= BREAKPOINT {
                 self.abort = true;
@@ -191,11 +205,19 @@ impl Game {
 
     /// (+d*rot) するとしての良さとそのときの Operation
     /// 違法手の場合は None
-    fn goodness(&self, d: Direction, rot: Direction) -> Option<(i64, Operation, Mode)> {
+    fn goodness(
+        &self,
+        d: Direction,
+        rot: Direction,
+        rot2: Direction,
+    ) -> Option<(i64, Operation, Mode)> {
         use Direction::*;
         let mut arm = self.arm.clone();
         arm += d;
         arm *= rot;
+        for child in arm.children.iter_mut() {
+            *child *= rot2;
+        }
         let mut score = 0;
         if arm.center.0 < 0 || arm.center.0 >= self.n || arm.center.1 < 0 || arm.center.1 >= self.n
         {
@@ -214,6 +236,9 @@ impl Game {
         let mut rm_requires = BTreeSet::new();
         {
             for i in 0..arm.v {
+                if !arm.is_leave(i) {
+                    continue;
+                }
                 let pos = arm.leave_pos(i);
                 if !arm.has[i] && self.balls.contains(&pos) && !rm_balls.contains(&pos) {
                     score += 100;
@@ -276,11 +301,15 @@ impl Game {
                 score -= min_dist;
             }
         }
+        let mut r = vec![rot; arm.v];
+        for k in 2..arm.v {
+            r[k] = rot2;
+        }
         Some((
             score,
             Operation {
                 mov: d,
-                rot: vec![rot; arm.v],
+                rot: r,
                 tako,
             },
             mode,
@@ -300,6 +329,8 @@ pub enum ArmType {
     L,
     T,
     OneHand,
+    LCross,
+    LL,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -328,8 +359,11 @@ pub struct Arm {
     tree: Vec<(usize, usize)>, // tree[i] = 葉っぱ i の (parent, length)
     leaves: Vec<(i64, i64)>,   // leaves[i] = 葉っぱ i の center から見た相対座標
     initial_commands: Vec<Operation>,
-    has: Vec<bool>,  // has[i] = 葉っぱ i がたこ焼きを確保してるか
-    num_tako: usize, // 確保してるたこ焼きの総数
+    has: Vec<bool>,     // has[i] = 葉っぱ i がたこ焼きを確保してるか
+    num_tako: usize,    // 確保してるたこ焼きの総数
+    children: Vec<Arm>, // 子ども
+    parent: Option<usize>, // 自身が他のアームの子どもである場合, 親を持つ
+                        // 親は親アームの中での ID
 }
 
 impl Arm {
@@ -340,6 +374,8 @@ impl Arm {
             ArmType::I => "I",
             ArmType::L => "L",
             ArmType::OneHand => "1",
+            ArmType::LCross => "L+",
+            ArmType::LL => "LL",
         };
         let name = format!("{}({}; {:?})", label, conf.scale, conf.center);
         match conf.atype {
@@ -348,6 +384,8 @@ impl Arm {
             ArmType::I => Self::iarm(name, conf.v, conf.scale, conf.center),
             ArmType::L => Self::larm(name, conf.v, conf.scale, conf.center),
             ArmType::OneHand => Self::onehand_arm(name, conf.v, conf.scale, conf.center),
+            ArmType::LCross => Self::lcross(name, conf.v, conf.scale, conf.center),
+            ArmType::LL => Self::ll(name, conf.v, conf.scale, conf.center),
         }
     }
     /// 十字型のアームを構築する
@@ -412,6 +450,8 @@ impl Arm {
             leaves,
             has,
             num_tako: 0,
+            children: vec![],
+            parent: None,
         }
     }
     /// I字型のアームを構築する
@@ -462,6 +502,8 @@ impl Arm {
             leaves,
             has,
             num_tako: 0,
+            children: vec![],
+            parent: None,
         }
     }
     /// L字型のアームを構築する
@@ -509,6 +551,8 @@ impl Arm {
             leaves,
             has,
             num_tako: 0,
+            children: vec![],
+            parent: None,
         }
     }
     /// T字型のアームを構築する
@@ -564,6 +608,8 @@ impl Arm {
             leaves,
             has,
             num_tako: 0,
+            children: vec![],
+            parent: None,
         }
     }
     /// 片手字型のアームを構築する
@@ -594,19 +640,176 @@ impl Arm {
             leaves,
             has,
             num_tako: 0,
+            children: vec![],
+            parent: None,
+        }
+    }
+    /// 全体は L でその先に Cross を乗せる
+    ///
+    ///      0 --+
+    ///      |
+    ///      +
+    ///
+    /// * `v` - 根っこ (0) を除く頂点数
+    /// * `scale` - アームの長さ (0以上)
+    fn lcross(name: String, v: usize, scale: usize, center: (i64, i64)) -> Self {
+        use Direction::*;
+        let mut tree = vec![(0, scale), (0, scale)];
+        let leaves = vec![(0, scale as i64), rot90((0, scale as i64))];
+        let m = (v - 2) / 2;
+        let mut cross1 = Self::crossarm(format!("{}-c1", name), m, 0, leaves[0]);
+        let mut cross2 = Self::crossarm(format!("{}-c2", name), v - 2 - m, 0, leaves[1]);
+        cross1.parent = Some(0);
+        cross2.parent = Some(1);
+        cross2 *= R;
+        for k in 0..cross1.v {
+            tree.push((1, cross1.tree[k].1));
+        }
+        for k in 0..cross2.v {
+            tree.push((2, cross2.tree[k].1));
+        }
+        let mut initial_commands = vec![];
+        {
+            let mut rot = vec![Nop; v];
+            let tako = vec![false; v + 1];
+            rot[1] = R;
+            initial_commands.push(Operation {
+                mov: Nop,
+                rot: rot.clone(),
+                tako: tako.clone(),
+            });
+            rot[1] = Nop;
+            for time in 0..2 {
+                for k in 2..2 + m {
+                    rot[k] = cross1.initial_commands[time].rot[k - 2];
+                }
+                for k in 2 + m..v {
+                    rot[k] = cross2.initial_commands[time].rot[k - m - 2];
+                }
+                initial_commands.push(Operation {
+                    mov: Nop,
+                    rot: rot.clone(),
+                    tako: tako.clone(),
+                });
+            }
+        };
+        let has = vec![false; v];
+        Self {
+            name,
+            center,
+            v,
+            tree,
+            initial_commands,
+            leaves,
+            has,
+            num_tako: 0,
+            children: vec![cross1, cross2],
+            parent: None,
+        }
+    }
+    /// 全体は L でその先に L を乗せる
+    ///
+    ///      0 --L
+    ///      |
+    ///      L
+    ///
+    /// * `v` - 根っこ (0) を除く頂点数
+    /// * `scale` - アームの長さ (0以上)
+    fn ll(name: String, v: usize, scale: usize, center: (i64, i64)) -> Self {
+        use Direction::*;
+        let mut tree = vec![(0, scale), (0, scale)];
+        let leaves = vec![(0, scale as i64), rot90((0, scale as i64))];
+        let m = (v - 2) / 2;
+        let mut child1 = Self::larm(format!("{}-l1", name), m, 0, leaves[0]);
+        let mut child2 = Self::larm(format!("{}-l2", name), v - 2 - m, 0, leaves[1]);
+        child1.parent = Some(0);
+        child2.parent = Some(1);
+        child2 *= R;
+        for k in 0..child1.v {
+            tree.push((1, child1.tree[k].1));
+        }
+        for k in 0..child2.v {
+            tree.push((2, child2.tree[k].1));
+        }
+        let mut initial_commands = vec![];
+        {
+            let mut rot = vec![Nop; v];
+            let tako = vec![false; v + 1];
+            rot[1] = R;
+            initial_commands.push(Operation {
+                mov: Nop,
+                rot: rot.clone(),
+                tako: tako.clone(),
+            });
+            rot[1] = Nop;
+            for time in 0..1 {
+                for k in 2..2 + m {
+                    rot[k] = child1.initial_commands[time].rot[k - 2];
+                }
+                for k in 2 + m..v {
+                    rot[k] = child2.initial_commands[time].rot[k - m - 2];
+                }
+                initial_commands.push(Operation {
+                    mov: Nop,
+                    rot: rot.clone(),
+                    tako: tako.clone(),
+                });
+            }
+        };
+        let has = vec![false; v];
+        Self {
+            name,
+            center,
+            v,
+            tree,
+            initial_commands,
+            leaves,
+            has,
+            num_tako: 0,
+            children: vec![child1, child2],
+            parent: None,
         }
     }
     fn is_full(&self) -> bool {
-        self.num_tako == self.v
+        self.num_tako == self.v - self.children.len()
     }
     fn is_empty(&self) -> bool {
         self.num_tako == 0
     }
     /// 葉っぱ i の座標
     fn leave_pos(&self, i: usize) -> (i64, i64) {
-        let x = self.center.0 + self.leaves[i].0;
-        let y = self.center.1 + self.leaves[i].1;
-        (x, y)
+        if i < self.leaves.len() {
+            let x = self.center.0 + self.leaves[i].0;
+            let y = self.center.1 + self.leaves[i].1;
+            (x, y)
+        } else {
+            let m = self.children[0].v;
+            if i < self.leaves.len() + m {
+                self.children[0].leave_pos(i - 2)
+            } else {
+                self.children[1].leave_pos(i - 2 - m)
+            }
+        }
+    }
+    /// 葉っぱ (たこ焼きをつかめる) かどうか判定
+    fn is_leave(&self, i: usize) -> bool {
+        if i < self.v {
+            let set: BTreeSet<usize> = self
+                .children
+                .iter()
+                .map(|child| child.parent.unwrap_or(999))
+                .collect();
+            !set.contains(&i)
+        } else {
+            let mut i = i - self.v;
+            for child in self.children.iter() {
+                if i < child.v {
+                    return child.is_leave(i);
+                }
+                i -= child.v;
+            }
+            return false;
+        }
     }
 }
 
@@ -622,6 +825,9 @@ impl std::ops::AddAssign<Direction> for Arm {
             _ => (0, 0),
         };
         self.center = (self.center.0 + dx, self.center.1 + dy);
+        for child in self.children.iter_mut() {
+            *child += d;
+        }
     }
 }
 impl std::ops::Add<Direction> for &Arm {
@@ -637,7 +843,7 @@ impl std::ops::Add<Direction> for &Arm {
 impl std::ops::MulAssign<Direction> for Arm {
     fn mul_assign(&mut self, d: Direction) {
         use Direction::*;
-        for i in 0..self.v {
+        for i in 0..self.leaves.len() {
             if d == R {
                 self.leaves[i] = rot90(self.leaves[i]);
             } else if d == L {
@@ -645,6 +851,13 @@ impl std::ops::MulAssign<Direction> for Arm {
                 self.leaves[i] = rot90(self.leaves[i]);
                 self.leaves[i] = rot90(self.leaves[i]);
             }
+        }
+        for child in self.children.iter_mut() {
+            *child *= d;
+            let pa = child.parent.unwrap();
+            let x = self.center.0 + self.leaves[pa].0;
+            let y = self.center.1 + self.leaves[pa].1;
+            child.center = (x, y);
         }
     }
 }
@@ -703,7 +916,13 @@ fn main() {
         let half = (n / 2) as i64;
         let mut scale = 1;
         while scale <= n / 2 {
-            for atype in [ArmType::Cross, ArmType::T, ArmType::L, ArmType::OneHand] {
+            for atype in [
+                ArmType::Cross,
+                ArmType::T,
+                ArmType::L,
+                ArmType::LCross,
+                ArmType::LL,
+            ] {
                 space.push((
                     Reverse(n - scale),
                     0,
@@ -759,6 +978,7 @@ fn main() {
     });
     if let Some(score) = best_score {
         eprintln!("\x1b[42mscore\x1b[0m {}", score);
+        // eprintln!("{}", &best_game.clone().unwrap().arm.name);
         best_game.unwrap().dump();
     } else {
         eprintln!("\x1b[31mFailed\x1b[0m");
