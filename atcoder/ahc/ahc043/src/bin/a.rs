@@ -265,9 +265,10 @@ impl Solver {
             }
         }
         if max_time == 0 {
-            comment!("#rollback to 0 (${})!!", max_okane);
+            let score = self.game.okane_init;
+            comment!("#rollback to 0 (${})!!", score);
             for t in 0..self.plan.len() {
-                self.plan[t] = (Action::Pause, max_okane);
+                self.plan[t] = (Action::Pause, score);
             }
         } else {
             comment!("#rollback to {} (${})", max_time + 1, max_okane);
@@ -287,7 +288,8 @@ impl Solver {
         for &p in newplan.iter() {
             self.game.act(p);
             self.game.okane += self.income();
-            self.plan.push((p, self.game.okane));
+            let expected_score = self.game.okane + self.game.left_time() as u64 * self.income();
+            self.plan.push((p, expected_score)); // plan, 見込み最終スコア
         }
     }
 
@@ -301,6 +303,7 @@ impl Solver {
             let mut map = HashMap::new();
             for &(p, q) in self.ps.iter() {
                 map.insert(p, q);
+                map.insert(q, p);
             }
             map
         };
@@ -319,7 +322,7 @@ impl Solver {
                             sum_income += p.distance(q);
                         }
                     }
-                    if max_sum_income < sum_income {
+                    if min_cost <= self.game.okane && max_sum_income < sum_income {
                         max_sum_income += sum_income;
                         tokyo_kari = P::new(x, y);
                     }
@@ -359,6 +362,9 @@ impl Solver {
 
         // building
         loop {
+            if self.game.left_time() == 0 {
+                break;
+            }
             comment!(
                 "#loop [{}/{}] ${}",
                 self.game.time,
@@ -392,7 +398,6 @@ impl Solver {
                     }
                 }
             }
-            trace!(&best_plan, best_plans_d);
             if let Some((i, goal, plan, cost_okane, cost_time)) = best_plan {
                 self.do_plan(plan);
                 self.connected[i] = true;
@@ -426,9 +431,184 @@ impl Solver {
                 break;
             }
         }
+
+        self.solve_osaka();
+        self.solve_osaka();
+
         let t = self.game.left_time();
         let pauses = vec![Action::Pause; t];
         self.do_plan(pauses);
+    }
+
+    /// 第二のハブ駅 osaka を作る
+    /// 全体は連結であることを保証しながら作る
+    fn solve_osaka(&mut self) {
+        if self.game.left_time() == 0 {
+            comment!("# No more time for osaka!");
+            return;
+        }
+        use Action::*;
+        use Cell::*;
+        comment!("#osaka; current income is ${}", self.income());
+        let neigh = neighbor::Grid4(self.game.size, self.game.size);
+        let pairs = {
+            let mut map = HashMap::new();
+            for &(p, q) in self.ps.iter() {
+                map.insert(p, q);
+                map.insert(q, p);
+            }
+            map
+        };
+        // 駅であること
+        // 未連結の地点がたくさんあること
+        // 建築可能なこと
+        let osaka = {
+            let mut kari = P::new(999, 999);
+            let mut max_sum_income = 0;
+            let mut stations = vec![];
+            for x in 0..self.game.size {
+                for y in 0..self.game.size {
+                    if self.game.board[x][y].is_station() {
+                        stations.push(P::new(x, y));
+                    }
+                }
+            }
+            for &s in stations.iter() {
+                let mut min_cost = COST_INF;
+                let mut sum_income = 0;
+                for (px, py) in neigh.around(s.x, s.y) {
+                    let p = P::new(px, py);
+                    if let Some(&q) = pairs.get(&p) {
+                        if self.game.is_connected(p, q) {
+                            continue;
+                        }
+                        let cost = 5_000 + 100 * (p.distance(q) - 5) as u64;
+                        min_cost = min!(min_cost, cost);
+                        sum_income += p.distance(q);
+                    }
+                }
+                comment!(
+                    "#osaka? s={:?}, min_cost={}, sum_income={}",
+                    s,
+                    min_cost,
+                    sum_income
+                );
+                if min_cost <= self.game.okane + self.income() * self.game.left_time() as u64
+                    && max_sum_income < sum_income
+                {
+                    max_sum_income += sum_income;
+                    kari = s.clone();
+                }
+            }
+            kari
+        };
+
+        // failed
+        if osaka == P::new(999, 999) {
+            comment!("# Not found osaka");
+            return;
+        }
+
+        comment!("#osaka={:?}", osaka);
+        assert!(self.game.board[osaka.x][osaka.y].is_station());
+
+        let mut goals = vec![];
+        for i in 0..self.ps.len() {
+            let (p, q) = self.ps[i];
+            let g = if osaka.distance(p) <= 2 {
+                Some(q)
+            } else if osaka.distance(q) <= 2 {
+                Some(p)
+            } else {
+                None
+            };
+            if let Some(u) = g {
+                if !self.game.is_connected(osaka, u) {
+                    goals.push((i, u, osaka.distance(u)));
+                    comment!("#goal[{}] = {:?}, d={}", i, u, osaka.distance(u));
+                }
+            }
+        }
+        let mut goals: HashSet<_> = goals.into_iter().collect();
+
+        // building
+        loop {
+            if self.game.left_time() == 0 {
+                break;
+            }
+            comment!(
+                "#loop [{}/{}] ${}",
+                self.game.time,
+                self.game.timeup,
+                self.game.okane
+            );
+            let mut minimal_cost = COST_INF; // 建築可能性を問わない最小コスト
+            let mut best_plan = None; // 建築可能な最高プラン
+            let mut best_plans_d = 0;
+            for &(i, p, d) in goals.iter() {
+                if self.connected[i] {
+                    continue;
+                }
+                let (plan, cost_okane, cost_time) = self.connect_tokyo(osaka, p);
+                comment!(
+                    "#planning ... osaka <- {} ({:?}); cost=${}, t={}",
+                    i,
+                    p,
+                    cost_okane,
+                    cost_time
+                );
+                if plan.is_empty() {
+                    continue;
+                }
+                minimal_cost = min!(minimal_cost, cost_okane);
+                // 建築可能
+                if cost_okane <= self.game.okane && cost_time <= self.game.left_time() {
+                    if best_plan.is_none() || best_plans_d < d {
+                        best_plan = Some((i, (i, p, d), plan, cost_okane, cost_time));
+                        best_plans_d = d;
+                    }
+                }
+            }
+            if let Some((i, goal, plan, cost_okane, cost_time)) = best_plan {
+                self.do_plan(plan);
+                self.connected[i] = true;
+                goals.remove(&goal);
+                comment!(
+                    "#do_plan ... -> {} ({:?}) ${} t={}",
+                    goal.0,
+                    goal.1,
+                    cost_okane,
+                    cost_time
+                );
+            } else if minimal_cost < COST_INF {
+                if self.income() > 0 {
+                    let t = if minimal_cost > self.game.okane {
+                        clip!(
+                            ((minimal_cost - self.game.okane) / self.income()) as usize,
+                            1,
+                            self.game.left_time()
+                        )
+                    } else {
+                        1
+                    };
+                    let pauses = vec![Action::Pause; t];
+                    self.do_plan(pauses);
+                    comment!("#pause t={}", t);
+                } else {
+                    comment!("#no income");
+                    break;
+                }
+            } else {
+                comment!("#No path found");
+                break;
+            }
+            if self.game.left_time() == 0 {
+                break;
+            }
+        }
+        // let t = self.game.left_time();
+        // let pauses = vec![Action::Pause; t];
+        // self.do_plan(pauses);
     }
 
     fn solve_greedy(&mut self) {
@@ -645,23 +825,36 @@ impl Solver {
         let neigh = neighbor::Grid4(self.game.size, self.game.size);
         let mut costtable = ndarray![COST_INF; self.game.size, self.game.size];
         let mut fromtable = ndarray![(0, 0); self.game.size, self.game.size];
+        {
+            for x in 0..self.game.size {
+                for y in 0..self.game.size {
+                    fromtable[x][y] = (x, y);
+                }
+            }
+        }
         let mut q = VecDeque::new();
 
         assert!(self.game.board[tokyo.x][tokyo.y].is_station());
-        costtable[tokyo.x][tokyo.y] = 0;
-        fromtable[tokyo.x][tokyo.y] = (tokyo.x, tokyo.y);
-        q.push_back((Reverse(0), tokyo.x, tokyo.y));
+
+        // start = around v
+        for (x, y) in neigh.around(v.x, v.y) {
+            let cost = match self.game.board[x][y] {
+                Station => 0,
+                _ => COST_STATION,
+            };
+            costtable[x][y] = cost;
+            fromtable[x][y] = (x, y);
+            q.push_back((Reverse(cost), x, y));
+        }
 
         while let Some((Reverse(cost), x, y)) = q.pop_front() {
             if cost > costtable[x][y] {
                 continue;
             }
             for (x2, y2) in neigh.iter(x, y) {
-                let is_goal = v.distance(P::new(x2, y2)) <= 2;
-                let pluscost = if self.game.board[x2][y2].is_station() {
+                let is_goal = self.game.board[x2][y2].is_station();
+                let pluscost = if is_goal {
                     0
-                } else if is_goal {
-                    COST_STATION
                 } else if self.game.board[x2][y2].is_rail() {
                     COST_STATION
                 } else {
@@ -676,20 +869,27 @@ impl Solver {
             }
         }
 
-        // goal?
-        let mut t = v.clone();
+        // goal == any station
+        let mut t = tokyo.clone();
         {
-            let mut minimal_goal_cost = COST_INF;
-            for (x, y) in neigh.around(t.x, t.y) {
-                if costtable[x][y] < COST_INF && minimal_goal_cost > costtable[x][y] {
-                    t = P::new(x, y);
-                    minimal_goal_cost = costtable[x][y];
+            let mut min = COST_INF;
+            for x in 0..self.game.size {
+                for y in 0..self.game.size {
+                    if self.game.board[x][y].is_station()
+                        && costtable[x][y] < COST_INF
+                        && fromtable[x][y] != (x, y)
+                    {
+                        if min > costtable[x][y] {
+                            min = costtable[x][y];
+                            t = P::new(x, y);
+                        }
+                    }
                 }
             }
-            // failed
-            if minimal_goal_cost >= COST_INF {
-                return (vec![], 0, 0);
-            }
+        }
+        // failed
+        if costtable[t.x][t.y] >= COST_INF {
+            return (vec![], 0, 0);
         }
 
         // build a path
@@ -708,7 +908,7 @@ impl Solver {
                 }
                 dcost.push(costtable[x][y] - costtable[xp][yp]);
                 (x, y) = (xp, yp);
-                if tokyo == P::new(x, y) {
+                if v.distance(P::new(x, y)) <= 2 && fromtable[x][y] == (x, y) {
                     break;
                 }
             }
@@ -716,14 +916,15 @@ impl Solver {
             dcost.push(costtable[x][y]);
         }
         if failed {
+            comment!("#failed");
             return (vec![], 0, 0);
         }
 
         // 東京駅はすでにある
         let mut plan = vec![];
         {
-            // goal
-            let (x, y) = path[0];
+            // start = around v
+            let (x, y) = path[path.len() - 1];
             if !self.game.board[x][y].is_station() {
                 plan.push(Put(Station, P::new(x, y)))
             }
@@ -782,7 +983,7 @@ fn main() {
     let mut solver = Solver::new(game, ps);
     solver.solve_tokyo();
     comment!("#Score ${}", solver.game.okane);
-    // solver.rollback();
+    solver.rollback();
     solver.show();
 }
 
